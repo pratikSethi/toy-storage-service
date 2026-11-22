@@ -53,6 +53,22 @@ Every response carries `Server: ts2-frontdoor/<version>` and `x-ts2-request-id`.
 
 Only a single range is supported. `bytes=a-b`, `bytes=a-` and `bytes=-n` work. An unsatisfiable range, or several ranges in one header, returns 416.
 
+## With the CLI
+
+The `ts2` CLI (`cli/`) does the same without curl. Install it once with `uv tool install --editable ./cli`, or prefix each command with `uv run --project cli`.
+
+```sh
+ts2 mb demo
+ts2 cp ./big.bin ts2://demo/big.bin        # prints the ETag
+ts2 ls demo --prefix docs/
+ts2 head ts2://demo/big.bin
+ts2 cp ts2://demo/big.bin ./copy.bin
+ts2 rm ts2://demo/big.bin
+ts2 rb demo
+```
+
+`--endpoint` or `TS2_ENDPOINT` points it elsewhere. Errors print as `title: detail (request_id)`. `make e2e` runs the same flow as a test.
+
 ## API docs
 
 - Interactive reference (Scalar): <http://127.0.0.1:9000/docs>

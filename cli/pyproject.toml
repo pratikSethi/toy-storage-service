@@ -1,0 +1,32 @@
+[project]
+name = "ts2"
+version = "0.1.0"
+description = "Command line client for TS2"
+readme = "README.md"
+authors = [
+    { name = "Pratik Sethi", email = "6607295+pratikSethi@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "typer>=0.29.2",
+]
+
+[project.scripts]
+ts2 = "ts2.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.6",
+]

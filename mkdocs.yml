@@ -2,6 +2,12 @@ site_name: TS2
 docs_dir: docs
 theme:
   name: material
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
 nav:
   - Home: README.md
   - Backlog: backlog.md
