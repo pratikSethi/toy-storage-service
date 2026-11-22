@@ -1,6 +1,6 @@
 # Demo: curl walkthrough
 
-Start frontdoor in one terminal. It listens on `127.0.0.1:9000` and keeps data under `./data`.
+Start FrontdoorService in one terminal. It listens on `127.0.0.1:9000` and keeps data under `./data`.
 
 ```sh
 make run

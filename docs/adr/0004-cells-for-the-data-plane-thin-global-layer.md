@@ -8,9 +8,9 @@ One big shared data plane means any bug or overload can affect every tenant, and
 
 ## Decision
 
-The data plane is deployed as cells. A cell is a self-sufficient copy of the data plane (one index plus N chunkstore nodes) serving a fixed subset of buckets. Cells never talk to each other. Above the cells is a thin global layer: the frontdoor router and the registry (bucket-to-cell map, tenant and quota data). Per-cell control functions (node membership, placement map, health, rebalancing) live inside the cell.
+The data plane is deployed as cells. A cell is a self-sufficient copy of the data plane (one ObjectIndexService plus N ChunkStoreService nodes) serving a fixed subset of buckets. Cells never talk to each other. Above the cells is a thin global layer: the FrontdoorService router and BucketRegistry (bucket-to-cell map, tenant and quota data). Per-cell control functions (node membership, node list used for placement, health, rebalancing) live inside the cell.
 
-A tenant move copies manifests and chunks to another cell, flips the bucket in the registry, then garbage-collects the source.
+A tenant move copies manifests and chunks to another cell, flips the bucket in BucketRegistry, then garbage-collects the source.
 
 ## Consequences
 
@@ -24,5 +24,5 @@ A tenant move copies manifests and chunks to another cell, flips the bucket in t
 ## Alternatives considered
 
 - **One flat cluster.** Simpler, but unbounded blast radius and size.
-- **Per-cell tenant and quota data.** Removes a global dependency from the write path, but makes tenant-wide quotas harder. Not chosen: quota counters are global in the registry for v0.
+- **Per-cell tenant and quota data.** Removes a global dependency from the write path, but makes tenant-wide quotas harder. Not chosen: quota counters are global in BucketRegistry for v0.
 - **Cells that replicate to each other.** Rejected: breaks the isolation that is the point.

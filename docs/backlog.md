@@ -4,30 +4,36 @@ Features by milestone, taken from the [PRD](prd.md). Order inside a milestone is
 
 ## v0.1
 
-- Frontdoor: health, bucket CRUD, object PUT/GET/HEAD/DELETE, list.
-- In-process SQLite index module and local-disk chunkstore module behind the real traits.
+- FrontdoorService: health, bucket CRUD, object PUT/GET/HEAD/DELETE, list.
+- In-process SQLite `ObjectIndex` and local-disk `ChunkStore` in `ts2-core`, behind the real traits.
 - OpenAPI from utoipa, Scalar UI, RFC 9457 errors, request ids, JSON logs.
-- `ts2` CLI, docker compose.
+- `ts2` CLI (Python), docker compose.
+- Observability profile: OTel Collector, VictoriaMetrics, VictoriaLogs, Grafana with one FrontdoorService dashboard.
+- ObjectIndex backup job (SQLite online backup).
 
 ## v0.2
 
-- Placement rule (`hash(chunk_id) mod N`), 3 chunkstore nodes.
+- C++ ChunkStoreService and ObjectIndexService replace the in-process modules.
+- Placement rule in `ts2-core` (`hash(chunk_id) mod N`), 3 ChunkStoreService nodes.
+- Orphan chunk GC (diff-based, minimum chunk age).
+- Client checksum header `x-ts2-checksum-sha256`.
 - Static API key auth.
 - Config reload without redeploy.
-- Per-request token from frontdoor to chunkstore ([ADR 0006](adr/0006-object-bytes-through-frontdoor.md)).
-- Grafana dashboards.
+- Per-request token from FrontdoorService to ChunkStoreService ([ADR 0006](adr/0006-object-bytes-through-frontdoor.md)).
+- Grafana dashboards for ObjectIndexService and ChunkStoreService.
 
 ## v0.3
 
 - Multipart upload.
 - Presigned URLs.
 - Quotas and `GET /v1/quotas`.
-- RocksDB index.
+- RocksDB-backed ObjectIndexService.
 
 ## v0.4
 
 - Second cell, R=3 replication, failure drills.
-- Registry extracted into a Go service (`registry/`) with gRPC.
+- BucketRegistry extracted into the Go BucketRegistryService (`bucket-registry/`) with gRPC.
+- Automated index backups and a restore drill (the index is the single point of loss until a replicated index exists).
 - Jobs API (`202` plus `Location: /v1/jobs/{id}`).
 
 ## v0.5
@@ -37,7 +43,7 @@ Features by milestone, taken from the [PRD](prd.md). Order inside a milestone is
 
 ## v0.6
 
-- Extent-based chunk storage and a benchmark against file-per-chunk.
+- Extent-based ChunkStoreService storage and a benchmark against file-per-chunk.
 
 ## v0.7
 
@@ -47,6 +53,8 @@ Features by milestone, taken from the [PRD](prd.md). Order inside a milestone is
 ## Unscheduled
 
 - S3 wire-compat adapter (XML, SigV4).
+- Sub-chunk checksums for partial range reads.
+- `If-Match` and object versioning.
 - Direct-to-cell client built on `ts2-core`.
 - Erasure coding profile tuning (other k and m values).
 - Vault for keys and chunkstore node certs.
