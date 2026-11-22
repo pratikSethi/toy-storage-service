@@ -159,6 +159,7 @@ Start the service with `make run`. It listens on `127.0.0.1:9000` and keeps data
 
     ```sh
     make up-obs
+    # FrontdoorService: http://127.0.0.1:9001
     # Grafana: http://localhost:3000, dashboard "frontdoor"
     ```
 

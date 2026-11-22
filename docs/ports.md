@@ -17,9 +17,6 @@ Every port TS2 uses, in one place. **Rule: a new port goes in this table in the 
 | 50052 | ObjectIndexService gRPC | built binary, or its container | host `127.0.0.1` when run directly, container only in Docker | `object-index/src/main.cpp`, `object-index/Dockerfile` |
 | 50061-50069 | Reserved for more ChunkStoreService nodes (node 1 to 9) | not used yet | n/a | this page |
 
-!!! note
-    Until `compose.yaml` is switched over, compose still publishes FrontdoorService on 9000. The next commit moves it to 9001.
-
 Compose publishes only FrontdoorService (9001) and Grafana (3000) to the host. The collector, VictoriaMetrics and VictoriaLogs talk to each other on the compose network.
 
 The two C++ services read `TS2_LISTEN`, so their ports can be overridden. The values above are the defaults.

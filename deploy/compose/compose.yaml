@@ -5,7 +5,7 @@ services:
       dockerfile: frontdoor/Dockerfile
     platform: linux/arm64
     ports:
-      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9000"
     volumes:
       - ts2-data:/data
       - ../../config/frontdoor.compose.yaml:/etc/ts2/frontdoor.yaml:ro

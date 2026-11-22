@@ -73,7 +73,7 @@ Until the C++ services exist (see the [plan](docs/plan.md)), `ts2-core` runs a S
 make run          # builds and starts FrontdoorService on 127.0.0.1:9000, data in ./data
 ```
 
-Tools to install first are listed in [docs/setup.md](docs/setup.md). Then follow the curl walkthrough in [docs/demo.md](docs/demo.md). Interactive API docs are at <http://127.0.0.1:9000/docs>. `make test` runs the tests, `make up` runs the same thing in docker compose, and `make docs` serves these docs locally. Every port the system uses is listed in [docs/ports.md](docs/ports.md).
+Tools to install first are listed in [docs/setup.md](docs/setup.md). Then follow the curl walkthrough in [docs/demo.md](docs/demo.md). Interactive API docs are at <http://127.0.0.1:9000/docs>. `make test` runs the tests, `make up` runs the same thing in docker compose on port 9001, and `make docs` serves these docs locally. Every port the system uses is listed in [docs/ports.md](docs/ports.md).
 
 ## FAQ
 

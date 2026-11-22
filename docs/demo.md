@@ -79,4 +79,4 @@ The OpenAPI file imports into Bruno: Collection, Import, OpenAPI, then pick `doc
 
 ## With compose
 
-`make up` builds the image (linux/arm64) and serves the same API on `127.0.0.1:9000`, with data in a named volume. `make down` stops it.
+`make up` builds the image (linux/arm64) and serves the same API on `127.0.0.1:9001`, with data in a named volume. It does not collide with `make run` on 9000. `make down` stops it.

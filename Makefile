@@ -8,10 +8,12 @@ run:
 	cargo run -p ts2-frontdoor -- ./config/frontdoor.yaml
 up:
 	docker compose -f deploy/compose/compose.yaml up --build -d
+	@echo "FrontdoorService: http://127.0.0.1:9001"
 down:
 	docker compose -f deploy/compose/compose.yaml down
 up-obs:
 	TS2_OTLP_ENDPOINT=http://otel-collector:4318 docker compose -f deploy/compose/compose.yaml --profile obs up --build -d
+	@echo "FrontdoorService: http://127.0.0.1:9001"
 	@echo "Grafana: http://localhost:3000 (dashboard: frontdoor)"
 down-obs:
 	docker compose -f deploy/compose/compose.yaml --profile obs down
