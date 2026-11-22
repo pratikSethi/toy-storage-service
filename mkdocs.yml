@@ -1,28 +1,68 @@
 site_name: TS2
+site_description: TS2, the Toy Storage Service. An S3-like object store built one component per commit.
 docs_dir: docs
 theme:
   name: material
+  icon:
+    logo: material/database-outline
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.instant
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+  palette:
+    - scheme: slate
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - scheme: default
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
 markdown_extensions:
+  - attr_list
+  - md_in_html
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
 nav:
-  - Home: README.md
-  - Backlog: backlog.md
-  - Plan: plan.md
-  - PRD: prd.md
-  - Demo: demo.md
+  - Home: index.md
+  - Get started:
+      - Demo: demo.md
   - Design:
-      - 000 System overview: design/000-system-overview.md
-  - ADRs:
-      - 0001 JSON REST over S3 wire compatibility: adr/0001-json-rest-over-s3-wire-compat.md
-      - 0002 Rust FrontdoorService, Go BucketRegistryService, C++ data plane: adr/0002-rust-frontdoor-go-bucket-registry-cpp-data-plane.md
-      - 0003 Random chunk ids: adr/0003-random-chunk-ids-not-content-addressed.md
-      - 0004 Cells for the data plane: adr/0004-cells-for-the-data-plane-thin-global-layer.md
-      - 0005 File-reload config: adr/0005-file-reload-config-before-config-service.md
-      - 0006 Object bytes through FrontdoorService: adr/0006-object-bytes-through-frontdoor.md
-      - 0007 Multi-word service names: adr/0007-multi-word-service-names.md
-  - Reviews:
-      - 001 Plan review: reviews/001-plan-review.md
+      - PRD: prd.md
+      - System overview: design/000-system-overview.md
+      - ADRs:
+          - 0001 JSON REST over S3 wire compatibility: adr/0001-json-rest-over-s3-wire-compat.md
+          - 0002 Rust FrontdoorService, Go BucketRegistryService, C++ data plane: adr/0002-rust-frontdoor-go-bucket-registry-cpp-data-plane.md
+          - 0003 Random chunk ids: adr/0003-random-chunk-ids-not-content-addressed.md
+          - 0004 Cells for the data plane: adr/0004-cells-for-the-data-plane-thin-global-layer.md
+          - 0005 File-reload config: adr/0005-file-reload-config-before-config-service.md
+          - 0006 Object bytes through FrontdoorService: adr/0006-object-bytes-through-frontdoor.md
+          - 0007 Multi-word service names: adr/0007-multi-word-service-names.md
+  - Project:
+      - Plan: plan.md
+      - Backlog: backlog.md
+      - Reviews:
+          - 001 Plan review: reviews/001-plan-review.md
