@@ -13,6 +13,8 @@ What to install to build, test and run TS2, and why. macOS first, Ubuntu/Debian 
 
 You can work on the Rust side, the CLI and the docs without any of the C++ tools.
 
+Ports used by `make run`, `make up`, `make e2e`, `make docs` and the C++ services are listed in the [port registry](ports.md).
+
 ## Tools
 
 | Tool | Why | Needed by | macOS | Ubuntu/Debian |

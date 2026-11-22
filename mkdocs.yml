@@ -51,6 +51,7 @@ nav:
   - Get started:
       - Development setup: setup.md
       - Demo: demo.md
+      - Port registry: ports.md
   - Design:
       - PRD: prd.md
       - System overview: design/000-system-overview.md
