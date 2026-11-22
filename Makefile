@@ -1,4 +1,6 @@
-.PHONY: build test run up down up-obs down-obs docs cli e2e e2e-native e2e-compose
+COMPOSE := docker compose -f deploy/compose/compose.yaml
+
+.PHONY: images build test run up down up-obs down-obs docs cli e2e e2e-native e2e-compose
 
 build:
 	cargo build --workspace
@@ -6,13 +8,18 @@ test:
 	cargo test --workspace
 run:
 	cargo run -p ts2-frontdoor -- ./config/frontdoor.yaml
-up:
-	docker compose -f deploy/compose/compose.yaml up --build -d
+# One at a time: a cold chunk-store build compiles gRPC, and the other C++ image reuses its layer (see docs/setup.md).
+images:
+	$(COMPOSE) build chunk-store-1
+	$(COMPOSE) build object-index
+	$(COMPOSE) build frontdoor
+up: images
+	$(COMPOSE) up -d
 	@echo "FrontdoorService: http://127.0.0.1:9001"
 down:
 	docker compose -f deploy/compose/compose.yaml down
-up-obs:
-	TS2_OTLP_ENDPOINT=http://otel-collector:4318 docker compose -f deploy/compose/compose.yaml --profile obs up --build -d
+up-obs: images
+	TS2_OTLP_ENDPOINT=http://otel-collector:4318 $(COMPOSE) --profile obs up -d
 	@echo "FrontdoorService: http://127.0.0.1:9001"
 	@echo "Grafana: http://localhost:3000 (dashboard: frontdoor)"
 down-obs:
@@ -46,5 +53,5 @@ e2e-native:
 
 # The smoke test against the compose stack from `make up` (FrontdoorService on 9001). Leaves the stack running.
 e2e-compose: cli
-	TS2_ENDPOINT=http://127.0.0.1:9001 TS2_RESTART_CHUNK_STORE='docker compose -f deploy/compose/compose.yaml restart chunk-store' \
+	TS2_ENDPOINT=http://127.0.0.1:9001 TS2_RESTART_CHUNK_STORE='docker compose -f deploy/compose/compose.yaml restart chunk-store-1' \
 	  uv run --project cli pytest tests/e2e -v

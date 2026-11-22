@@ -1,6 +1,6 @@
 # deploy/compose
 
-Docker compose setup for running TS2 in containers. It starts FrontdoorService (Rust) in remote mode plus ObjectIndexService and one ChunkStoreService node (both C++), each with its own named volume (`index-data`, `chunk-data`). The two C++ services publish no host port; only frontdoor reaches them, over the compose network. The `ts2-data` volume is only used if you unset `TS2_INDEX_ADDR` and `TS2_CHUNK_NODES` on frontdoor. The observability profile is separate.
+Docker compose setup for running TS2 in containers. It starts FrontdoorService (Rust) in remote mode plus ObjectIndexService and four ChunkStoreService nodes (`chunk-store-1` to `chunk-store-4`, node ids `node-1` to `node-4`, ports 50061 to 50064, all C++), each with its own named volume (`index-data`, `chunk-data-1` to `chunk-data-4`). FrontdoorService places each chunk on one of them by rendezvous hashing. The C++ services publish no host port; only frontdoor reaches them, over the compose network. The `ts2-data` volume is only used if you unset `TS2_INDEX_ADDR` and `TS2_CHUNK_NODES` on frontdoor. The observability profile is separate.
 
 ## What it owns
 

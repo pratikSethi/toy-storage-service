@@ -1,3 +1,7 @@
+x-chunk-store: &chunk-store
+  platform: linux/arm64
+  restart: unless-stopped
+
 services:
   frontdoor:
     build:
@@ -12,7 +16,7 @@ services:
     environment:
       # Remote mode: gRPC to the two services below. Unset both for the in-process backends.
       TS2_INDEX_ADDR: object-index:50052
-      TS2_CHUNK_NODES: node-1=chunk-store:50051
+      TS2_CHUNK_NODES: node-1=chunk-store-1:50061,node-2=chunk-store-2:50062,node-3=chunk-store-3:50063,node-4=chunk-store-4:50064
       # Frontdoor refuses to start unless TS2_GC_MIN_AGE_SECS is at least twice TS2_PUT_TIMEOUT_SECS.
       TS2_PUT_TIMEOUT_SECS: ${TS2_PUT_TIMEOUT_SECS:-900}
       TS2_GC_MIN_AGE_SECS: ${TS2_GC_MIN_AGE_SECS:-3600}
@@ -26,21 +30,70 @@ services:
       timeout: 3s
       retries: 3
     depends_on:
-      chunk-store: {condition: service_healthy}
+      chunk-store-1: {condition: service_healthy}
+      chunk-store-2: {condition: service_healthy}
+      chunk-store-3: {condition: service_healthy}
+      chunk-store-4: {condition: service_healthy}
       object-index: {condition: service_healthy}
 
   # The two gRPC services publish no host port; only frontdoor talks to them (review 002).
-  chunk-store:
+  # Four nodes from one image. Node ids are permanent (ADR 0012): each has its own volume and never changes id.
+  # Ports 50061-50064 are listed in docs/ports.md. Only frontdoor talks to them; none is published to the host.
+  chunk-store-1:
+    <<: *chunk-store
+    image: ts2-chunk-store
     build:
       context: ../..
       dockerfile: chunk-store/Dockerfile
-    platform: linux/arm64
-    restart: unless-stopped
+    environment:
+      TS2_NODE_ID: node-1
+      TS2_LISTEN: 0.0.0.0:50061
     volumes:
-      - chunk-data:/data
+      - chunk-data-1:/data
     healthcheck:
-      # The image has no curl or grpc_health_probe; perl-base is there, and a TCP connect to the listener is enough.
-      test: ["CMD", "perl", "-MIO::Socket::INET", "-e", "IO::Socket::INET->new('127.0.0.1:50051') or exit 1"]
+      test: ["CMD", "perl", "-MIO::Socket::INET", "-e", "IO::Socket::INET->new('127.0.0.1:50061') or exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  chunk-store-2:
+    <<: *chunk-store
+    image: ts2-chunk-store
+    environment:
+      TS2_NODE_ID: node-2
+      TS2_LISTEN: 0.0.0.0:50062
+    volumes:
+      - chunk-data-2:/data
+    healthcheck:
+      test: ["CMD", "perl", "-MIO::Socket::INET", "-e", "IO::Socket::INET->new('127.0.0.1:50062') or exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  chunk-store-3:
+    <<: *chunk-store
+    image: ts2-chunk-store
+    environment:
+      TS2_NODE_ID: node-3
+      TS2_LISTEN: 0.0.0.0:50063
+    volumes:
+      - chunk-data-3:/data
+    healthcheck:
+      test: ["CMD", "perl", "-MIO::Socket::INET", "-e", "IO::Socket::INET->new('127.0.0.1:50063') or exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  chunk-store-4:
+    <<: *chunk-store
+    image: ts2-chunk-store
+    environment:
+      TS2_NODE_ID: node-4
+      TS2_LISTEN: 0.0.0.0:50064
+    volumes:
+      - chunk-data-4:/data
+    healthcheck:
+      test: ["CMD", "perl", "-MIO::Socket::INET", "-e", "IO::Socket::INET->new('127.0.0.1:50064') or exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -102,7 +155,10 @@ services:
 
 volumes:
   ts2-data:
-  chunk-data:
+  chunk-data-1:
+  chunk-data-2:
+  chunk-data-3:
+  chunk-data-4:
   index-data:
   vm-data:
   vl-data:
