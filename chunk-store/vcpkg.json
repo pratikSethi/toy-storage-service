@@ -1,0 +1,5 @@
+{
+  "name": "ts2-chunk-store",
+  "version": "0.0.1",
+  "dependencies": ["grpc", "protobuf", "spdlog", "catch2"]
+}

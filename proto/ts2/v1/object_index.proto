@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package ts2.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ObjectIndexService maps (bucket, key) to a manifest. It never sees object bytes, except small
+// inline objects stored inside the manifest. Mirrors the Rust ObjectIndex trait in ts2-core.
+//
+// Common errors on every RPC:
+//   UNAVAILABLE         the index is starting up or not the leader for this bucket.
+//   INTERNAL            storage failure.
+service ObjectIndexService {
+  // Creates a bucket.
+  // Errors: ALREADY_EXISTS, INVALID_ARGUMENT (bad name).
+  rpc CreateBucket(CreateBucketRequest) returns (Bucket);
+
+  // Errors: NOT_FOUND.
+  rpc GetBucket(GetBucketRequest) returns (Bucket);
+
+  // Deletes an empty bucket.
+  // Errors: NOT_FOUND, FAILED_PRECONDITION (bucket is not empty).
+  rpc DeleteBucket(DeleteBucketRequest) returns (DeleteBucketResponse);
+
+  // Lists all buckets ordered by name.
+  rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse);
+
+  // Commits a manifest atomically. The index assigns `version` (1 for a new key, previous + 1 on
+  // overwrite) and returns the stored manifest. This is the commit point of an upload: chunks
+  // become reachable only after this call succeeds.
+  // Errors: NOT_FOUND (bucket), INVALID_ARGUMENT (key too long, both or neither of inline_data and chunks).
+  rpc PutManifest(PutManifestRequest) returns (PutManifestResponse);
+
+  // Errors: NOT_FOUND (bucket or object; the message says which).
+  rpc GetManifest(GetManifestRequest) returns (Manifest);
+
+  // Removes the manifest and returns it so the caller can schedule its chunks for garbage collection.
+  // Errors: NOT_FOUND (bucket or object).
+  rpc DeleteManifest(DeleteManifestRequest) returns (Manifest);
+
+  // Lists keys in bytewise order. Returns keys that start with `prefix` and sort after `start_after`.
+  // Errors: NOT_FOUND (bucket), INVALID_ARGUMENT (max_keys out of range).
+  rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse);
+
+  // Liveness and identity of this index instance. Also serves as the health check.
+  rpc NodeInfo(NodeInfoRequest) returns (NodeInfoResponse);
+}
+
+message Bucket {
+  string name = 1;
+  google.protobuf.Timestamp created_at = 2;
+}
+
+message ChunkRef {
+  string chunk_id = 1;
+  string node_id = 2;
+  uint64 length = 3;
+  // Hex sha256 of the chunk bytes.
+  string sha256 = 4;
+}
+
+// One per object key. `inline_data` and `chunks` are mutually exclusive.
+message Manifest {
+  string bucket = 1;
+  string key = 2;
+  uint64 version = 3;
+  uint64 size = 4;
+  // Hex sha256 of the whole object.
+  string etag = 5;
+  string content_type = 6;
+  google.protobuf.Timestamp created_at = 7;
+  map<string, string> metadata = 8;
+  // Set for small objects. Presence matters, so an empty object is an empty value, not unset.
+  optional bytes inline_data = 9;
+  uint64 chunk_bytes = 10;
+  repeated ChunkRef chunks = 11;
+}
+
+message ObjectSummary {
+  string key = 1;
+  uint64 size = 2;
+  string etag = 3;
+  google.protobuf.Timestamp last_modified = 4;
+}
+
+message CreateBucketRequest { string name = 1; }
+message GetBucketRequest { string name = 1; }
+message DeleteBucketRequest { string name = 1; }
+message DeleteBucketResponse {}
+message ListBucketsRequest {}
+message ListBucketsResponse { repeated Bucket buckets = 1; }
+
+message PutManifestRequest { Manifest manifest = 1; }
+message PutManifestResponse { Manifest manifest = 1; }
+message GetManifestRequest {
+  string bucket = 1;
+  string key = 2;
+}
+message DeleteManifestRequest {
+  string bucket = 1;
+  string key = 2;
+}
+
+message ListObjectsRequest {
+  string bucket = 1;
+  string prefix = 2;
+  string start_after = 3;
+  uint32 max_keys = 4;
+}
+
+message ListObjectsResponse {
+  repeated ObjectSummary objects = 1;
+  bool is_truncated = 2;
+  // Pass as start_after to fetch the next page. Empty when not truncated.
+  string next_start_after = 3;
+}
+
+message NodeInfoRequest {}
+
+message NodeInfoResponse {
+  string node_id = 1;
+  string cell = 2;
+  bool healthy = 3;
+  string version = 4;
+}

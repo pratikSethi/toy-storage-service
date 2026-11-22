@@ -1,0 +1,117 @@
+syntax = "proto3";
+
+package ts2.v1;
+
+// ChunkStoreService stores immutable chunks on one storage node.
+// Chunk ids are random 128-bit values chosen by the gateway (ADR 0003), written as lowercase hex.
+// They are not derived from content; the sha256 is stored beside the id and verified on read.
+// A chunk never changes after it is stored.
+//
+// Common errors on every RPC:
+//   UNAVAILABLE         the node is starting up or draining.
+//   INTERNAL            disk or other local failure.
+service ChunkStoreService {
+  // Stores one chunk. The first message must be `header`, every later message must be `data`.
+  // The node writes to a temp file, verifies length and sha256, fsyncs, then renames into place.
+  // Putting a chunk that already exists with the same bytes succeeds (idempotent).
+  // Errors:
+  //   INVALID_ARGUMENT    first message is not a header, bad chunk id, or a data frame before the header.
+  //   PERMISSION_DENIED   write token is missing, expired or not valid for this chunk id.
+  //   DATA_LOSS           received length or sha256 differs from the header; nothing is stored.
+  //   RESOURCE_EXHAUSTED  not enough free space.
+  rpc PutChunk(stream PutChunkRequest) returns (PutChunkResponse);
+
+  // Streams a chunk, or a byte range of it, in frames. The node re-verifies the stored checksum
+  // for whole-chunk reads before the last frame.
+  // Errors:
+  //   NOT_FOUND           no such chunk.
+  //   OUT_OF_RANGE        the range ends past the chunk length.
+  //   DATA_LOSS           stored bytes fail their checksum.
+  rpc GetChunk(GetChunkRequest) returns (stream GetChunkResponse);
+
+  // Removes a chunk. Used by orphan garbage collection and to roll back a failed upload. Deleting a chunk that does not exist succeeds (idempotent).
+  // Errors:
+  //   PERMISSION_DENIED   caller is not allowed to delete.
+  rpc DeleteChunk(DeleteChunkRequest) returns (DeleteChunkResponse);
+
+  // Lists chunk ids on this node in ascending order, one page at a time. Orphan garbage collection
+  // (owned by ObjectIndexService) diffs this against the manifests to find unreferenced chunks.
+  // Errors:
+  //   INVALID_ARGUMENT    bad page_token or page_size.
+  rpc ListChunks(ListChunksRequest) returns (ListChunksResponse);
+
+  // Liveness and placement facts about this node. Also serves as the health check.
+  // Errors: none besides the common ones.
+  rpc NodeInfo(NodeInfoRequest) returns (NodeInfoResponse);
+}
+
+message PutChunkRequest {
+  oneof payload {
+    PutChunkHeader header = 1;  // first message only
+    bytes data = 2;             // every following message
+  }
+}
+
+message PutChunkHeader {
+  string chunk_id = 1;
+  uint64 expected_length = 2;
+  // Hex sha256 of the whole chunk.
+  string expected_sha256 = 3;
+  // Opaque token issued by the gateway that authorizes this write.
+  string write_token = 4;
+}
+
+message PutChunkResponse {
+  uint64 stored_length = 1;
+  // Hex sha256 the node computed over the bytes it received.
+  string sha256 = 2;
+}
+
+message GetChunkRequest {
+  string chunk_id = 1;
+  // Half-open byte range [range_start, range_end). range_end = 0 means "to the end".
+  uint64 range_start = 2;
+  uint64 range_end = 3;
+}
+
+message GetChunkResponse {
+  bytes data = 1;
+}
+
+message DeleteChunkRequest {
+  string chunk_id = 1;
+}
+
+message DeleteChunkResponse {}
+
+message ListChunksRequest {
+  // 0 lets the node choose.
+  uint32 page_size = 1;
+  // Empty for the first page; otherwise the next_page_token of the previous response.
+  string page_token = 2;
+}
+
+message ListChunksResponse {
+  repeated ChunkInfo chunks = 1;
+  // Empty when there are no more pages.
+  string next_page_token = 2;
+}
+
+message ChunkInfo {
+  string chunk_id = 1;
+  uint64 length = 2;
+  // Seconds since the Unix epoch. GC never deletes chunks younger than gc_min_chunk_age.
+  int64 created_unix = 3;
+}
+
+message NodeInfoRequest {}
+
+message NodeInfoResponse {
+  string node_id = 1;
+  string cell = 2;
+  string failure_domain = 3;
+  uint64 bytes_free = 4;
+  uint64 bytes_total = 5;
+  bool healthy = 6;
+  string version = 7;
+}
