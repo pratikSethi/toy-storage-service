@@ -15,7 +15,7 @@ find_package(SQLite3 REQUIRED)
 # Generated C++ and gRPC code for the shared contract in ../proto.
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ts2_proto.cmake)
 
-add_library(object_index_lib STATIC src/service.cpp)
+add_library(object_index_lib STATIC src/service.cpp src/sqlite_index.cpp)
 target_include_directories(object_index_lib PUBLIC src)
 target_link_libraries(object_index_lib PUBLIC ts2_proto spdlog::spdlog SQLite::SQLite3)
 target_compile_options(object_index_lib PRIVATE -Wall -Wextra)
@@ -26,6 +26,6 @@ install(TARGETS ts2-object-index RUNTIME DESTINATION bin)
 
 enable_testing()
 include(Catch)
-add_executable(object_index_tests tests/service_test.cpp)
+add_executable(object_index_tests tests/service_test.cpp tests/sqlite_index_test.cpp)
 target_link_libraries(object_index_tests PRIVATE object_index_lib Catch2::Catch2WithMain)
 catch_discover_tests(object_index_tests)
