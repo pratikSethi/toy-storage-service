@@ -14,10 +14,11 @@ Features by milestone, taken from the [PRD](prd.md). Order inside a milestone is
 ## v0.2
 
 - C++ ChunkStoreService and ObjectIndexService replace the in-process modules.
-- Placement rule in `ts2-core` (`hash(chunk_id) mod N`), 3 ChunkStoreService nodes.
+- Placement rule in `ts2-core` (`hash(chunk_id) mod N`), 3 ChunkStoreService nodes. Single copy, no replication yet.
+- NodeInfo id check at FrontdoorService startup ([ADR 0012](adr/0012-node-ids-are-permanent.md)).
 - Orphan chunk GC (diff-based, minimum chunk age).
 - End-to-end client checksum: the client sends a sha256 of the whole object (and of each part, once multipart exists) in `x-ts2-checksum-sha256`. FrontdoorService verifies it before committing the manifest and rejects a mismatch with 400. Today frontdoor computes the ETag from the bytes it received, which cannot catch corruption that happened before frontdoor.
-- Static API key auth.
+- Static API key auth. Its own item, separate from placement and replication.
 - Config reload without redeploy.
 - Per-request token from FrontdoorService to ChunkStoreService ([ADR 0006](adr/0006-object-bytes-through-frontdoor.md)).
 - Grafana dashboards for ObjectIndexService and ChunkStoreService.
@@ -33,8 +34,12 @@ Features by milestone, taken from the [PRD](prd.md). Order inside a milestone is
 
 ## v0.4
 
-- Second cell, R=3 replication, failure drills.
-- Replication ack policy: with R replicas per chunk, frontdoor returns 201 only after W replicas are durable (each node verified the sha256 and fsynced before replying) and the manifest is committed. Pick W (W=R=3, or W=2 with background repair) and document the trade-off between write latency and durability.
+- Rendezvous placement over healthy nodes, 4 ChunkStoreService nodes per cell, R=3 ([ADR 0011](adr/0011-replica-recording-and-repair.md)). Manifest records `node_ids` per chunk.
+- Replication with W=R=3 first. Then W=2 ([ADR 0010](adr/0010-replication-and-the-meaning-of-201.md)): 201 means 2 durable copies on different failure domains plus a committed manifest. Needs the repair job below.
+- Repair job: finds under-replicated chunks, copies them, updates the manifest with a version compare-and-swap in `PutManifest`. Must exist before W=2 ships.
+- Per-cell GC sweep in FrontdoorService, one sweeper per cell ([ADR 0013](adr/0013-gc-ownership-per-cell.md)).
+- Second cell with a static bucket-to-cell map in FrontdoorService config, global name check across cells, ListBuckets fan-out ([ADR 0008](adr/0008-what-a-cell-is.md), [ADR 0009](adr/0009-bucket-to-cell-map.md)).
+- Failure drills: one node down, a whole cell down.
 - BucketRegistry extracted into the Go BucketRegistryService (`bucket-registry/`) with gRPC.
 - Automated index backups and a restore drill (the index is the single point of loss until a replicated index exists).
 - Jobs API (`202` plus `Location: /v1/jobs/{id}`).

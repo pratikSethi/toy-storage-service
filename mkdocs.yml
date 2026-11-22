@@ -79,6 +79,12 @@ nav:
           - 0005 File-reload config: adr/0005-file-reload-config-before-config-service.md
           - 0006 Object bytes through FrontdoorService: adr/0006-object-bytes-through-frontdoor.md
           - 0007 Multi-word service names: adr/0007-multi-word-service-names.md
+          - 0008 What a cell is: adr/0008-what-a-cell-is.md
+          - 0009 Bucket-to-cell map: adr/0009-bucket-to-cell-map.md
+          - 0010 Replication R and W, and what 201 means: adr/0010-replication-and-the-meaning-of-201.md
+          - 0011 Replica recording and repair: adr/0011-replica-recording-and-repair.md
+          - 0012 Node ids are permanent: adr/0012-node-ids-are-permanent.md
+          - 0013 GC ownership per cell: adr/0013-gc-ownership-per-cell.md
       - Reviews:
           - 001 Plan review: reviews/001-plan-review.md
           - 002 Round 3 review: reviews/002-round3-review.md
