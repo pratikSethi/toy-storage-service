@@ -4,3 +4,21 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+async-trait = "0.1.92"
+base64 = "0.23.1"
+bytes = "1.12.2"
+chrono = { version = "0.4.45", features = ["serde"] }
+futures-util = "0.3.34"
+hex = "0.4.3"
+libc = "0.2.191"
+rusqlite = { version = "0.43.0", features = ["bundled", "chrono"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["fs", "io-util", "rt", "macros", "sync"] }
+uuid = { version = "1.29.3", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+tokio = { version = "1.54.1", features = ["rt-multi-thread"] }
