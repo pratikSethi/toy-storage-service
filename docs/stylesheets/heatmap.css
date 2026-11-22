@@ -1,0 +1,29 @@
+/* Availability heat map on engineering/operations.md. Colours are tinted overlays, so text keeps the theme colour in dark and light. */
+.heatmap {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.heatmap th,
+.heatmap td {
+  padding: 0.35rem 0.6rem;
+  text-align: center;
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+.heatmap th:first-child,
+.heatmap td:first-child {
+  text-align: left;
+  font-weight: 600;
+}
+.heatmap td.g { background: rgba(46, 160, 67, 0.35); }
+.heatmap td.a { background: rgba(227, 160, 8, 0.40); }
+.heatmap td.r { background: rgba(229, 57, 53, 0.45); }
+.heatmap-legend span {
+  display: inline-block;
+  padding: 0.1rem 0.6rem;
+  margin-right: 0.4rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+.heatmap-legend .g { background: rgba(46, 160, 67, 0.35); }
+.heatmap-legend .a { background: rgba(227, 160, 8, 0.40); }
+.heatmap-legend .r { background: rgba(229, 57, 53, 0.45); }

@@ -68,3 +68,5 @@ Features by milestone, taken from the [PRD](prd.md). Order inside a milestone is
 - Temporal as the engine for jobs.
 - Key and cert rotation jobs.
 - GitHub Pages for docs, once the repo is public, with a link from pratiksethi.dev.
+- Per-bucket region (and later availability zone) chosen at CreateBucket. Needs a location field in the API and BucketRegistry's bucket-to-cell map. Not in the API today.
+- Ops Review Grafana dashboard: availability by region and cell with the SLO lines drawn on, built from the real `ts2_http_*` metrics. See [operations](engineering/operations.md).
