@@ -18,7 +18,7 @@ pub async fn sweep(
     min_age: Duration,
 ) -> Result<usize> {
     let mut listed = Vec::new();
-    for node in chunks.nodes() {
+    for node in chunks.configured_nodes() {
         for c in chunks.list_chunks(&node).await? {
             listed.push((node.clone(), c));
         }

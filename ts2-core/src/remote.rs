@@ -12,7 +12,8 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::ops::Range;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tonic::transport::{Channel, Endpoint};
 use tonic::{Code, Status};
 use ts2_proto::v1 as pb;
@@ -325,10 +326,33 @@ pub struct ListedChunk {
     pub created_unix: i64,
 }
 
-/// `ChunkStore` over gRPC to one ChunkStoreService per node. `node` arguments are the ids in `new`.
+/// How long a node that answered RESOURCE_EXHAUSTED is left out of placement.
+const EXHAUSTED_BACKOFF: Duration = Duration::from_secs(60);
+
+/// What frontdoor believes about one node. Starts healthy so the first requests work before any refresh.
+struct NodeState {
+    healthy: bool,
+    exhausted_until: Option<Instant>,
+}
+
+struct Node {
+    id: String,
+    addr: String,
+    client: ChunkStoreServiceClient<Channel>,
+    state: Mutex<NodeState>,
+}
+
+impl Node {
+    fn placeable(&self) -> bool {
+        let s = self.state.lock().unwrap();
+        s.healthy && s.exhausted_until.is_none_or(|t| Instant::now() >= t)
+    }
+}
+
+/// `ChunkStore` over gRPC to one ChunkStoreService per node. `node` arguments are the ids in `connect_lazy`.
 pub struct RemoteChunkStore {
-    /// In config order, which is the order `nodes()` reports.
-    nodes: Vec<(String, ChunkStoreServiceClient<Channel>)>,
+    /// In config order, which is the order `configured_nodes()` reports.
+    nodes: Vec<Node>,
     deadlines: Deadlines,
 }
 
@@ -342,17 +366,102 @@ impl RemoteChunkStore {
         }
         let nodes = nodes
             .iter()
-            .map(|(id, addr)| Ok((id.clone(), ChunkStoreServiceClient::new(channel(addr)?))))
+            .map(|(id, addr)| {
+                Ok(Node {
+                    id: id.clone(),
+                    addr: addr.clone(),
+                    client: ChunkStoreServiceClient::new(channel(addr)?),
+                    state: Mutex::new(NodeState {
+                        healthy: true,
+                        exhausted_until: None,
+                    }),
+                })
+            })
             .collect::<Result<_>>()?;
         Ok(Self { nodes, deadlines })
     }
 
-    fn client(&self, node: &str) -> Result<ChunkStoreServiceClient<Channel>> {
+    fn node(&self, id: &str) -> Result<&Node> {
         self.nodes
             .iter()
-            .find(|(id, _)| id == node)
-            .map(|(_, c)| c.clone())
-            .ok_or_else(|| Error::Internal(format!("unknown chunk node {node:?}")))
+            .find(|n| n.id == id)
+            .ok_or_else(|| Error::Internal(format!("unknown chunk node {id:?}")))
+    }
+
+    fn client(&self, node: &str) -> Result<ChunkStoreServiceClient<Channel>> {
+        Ok(self.node(node)?.client.clone())
+    }
+
+    /// Every configured node, healthy or not. GC lists all of them; `nodes()` is only where new chunks may go.
+    pub fn configured_nodes(&self) -> Vec<String> {
+        self.nodes.iter().map(|n| n.id.clone()).collect()
+    }
+
+    /// Asks one node who it is. An `Err` means it could not be asked; `Ok(false)` means it answered as a
+    /// different node or reported itself unhealthy.
+    async fn probe(&self, n: &Node) -> Result<bool> {
+        let mut c = n.client.clone();
+        let info = with_deadline(
+            self.deadlines.other,
+            c.node_info(pb::ChunkStoreNodeInfoRequest {}),
+        )
+        .await?
+        .map_err(|s| map_status(s, Source::Chunk, ""))?
+        .into_inner();
+        if info.node_id != n.id {
+            return Err(Error::Internal(format!(
+                "chunk node at {} reports id {:?}, but the config says {:?}",
+                n.addr, info.node_id, n.id
+            )));
+        }
+        Ok(info.healthy)
+    }
+
+    /// Startup check: every node must report the id it has in the config, because the id is written into
+    /// every manifest. A node that cannot be reached yet is retried for `wait`, then left to the health
+    /// refresh (it is also checked there). A wrong id fails at once.
+    pub async fn verify_node_ids(&self, wait: Duration) -> Result<()> {
+        let give_up = Instant::now() + wait;
+        for n in &self.nodes {
+            loop {
+                match self.probe(n).await {
+                    Ok(_) => break,
+                    Err(e @ Error::Internal(_)) => return Err(e),
+                    Err(e) if Instant::now() >= give_up => {
+                        tracing::warn!(node = %n.id, error = %e, "chunk node not reachable at startup; id not verified");
+                        break;
+                    }
+                    Err(_) => tokio::time::sleep(Duration::from_millis(250)).await,
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// One health pass over all nodes. An unreachable node, one that says it is unhealthy and one that
+    /// answers with the wrong id are all left out of placement until a later pass says otherwise.
+    pub async fn refresh_health(&self) {
+        for n in &self.nodes {
+            let healthy = match self.probe(n).await {
+                Ok(h) => h,
+                Err(e) => {
+                    tracing::warn!(node = %n.id, error = %e, "chunk node health check failed");
+                    false
+                }
+            };
+            n.state.lock().unwrap().healthy = healthy;
+        }
+    }
+
+    /// Runs `refresh_health` every `interval` until the process exits.
+    pub fn spawn_health_refresh(self: &Arc<Self>, interval: Duration) {
+        let store = self.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(interval).await;
+                store.refresh_health().await;
+            }
+        });
     }
 
     /// Every chunk on one node, oldest-first order is not promised. Held in memory: fine for a toy.
@@ -389,8 +498,16 @@ fn check_id(id: &str) -> Result<()> {
 
 #[async_trait]
 impl ChunkStore for RemoteChunkStore {
+    /// Healthy nodes that did not just run out of disk. If none qualifies, all of them: the health view may
+    /// be stale, and trying beats refusing every write.
     fn nodes(&self) -> Vec<String> {
-        self.nodes.iter().map(|(id, _)| id.clone()).collect()
+        let ok: Vec<_> = self.nodes.iter().filter(|n| n.placeable()).collect();
+        let pick = if ok.is_empty() {
+            self.nodes.iter().collect()
+        } else {
+            ok
+        };
+        pick.into_iter().map(|n| n.id.clone()).collect()
     }
 
     /// Orphan GC removes old chunks after `min_age`, so a GET in flight keeps its chunks.
@@ -418,10 +535,14 @@ impl ChunkStore for RemoteChunkStore {
             })
             .collect();
         let call = client.put_chunk(futures_util::stream::iter(frames));
-        with_deadline(self.deadlines.put_chunk, call)
+        let result = with_deadline(self.deadlines.put_chunk, call)
             .await?
-            .map_err(|s| map_status(s, Source::Chunk, chunk_id))?;
-        Ok(())
+            .map_err(|s| map_status(s, Source::Chunk, chunk_id));
+        if matches!(result, Err(Error::DiskFull)) {
+            self.node(node)?.state.lock().unwrap().exhausted_until =
+                Some(Instant::now() + EXHAUSTED_BACKOFF);
+        }
+        result.map(|_| ())
     }
 
     async fn get(&self, node: &str, chunk_id: &str, range: Option<Range<u64>>) -> Result<Bytes> {

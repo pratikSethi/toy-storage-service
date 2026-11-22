@@ -27,6 +27,9 @@ struct Fake {
     /// PutChunk fails with UNAVAILABLE once this many puts have succeeded.
     puts_before_down: Option<usize>,
     puts: usize,
+    /// What NodeInfo answers.
+    node_id: String,
+    node_unhealthy: bool,
     /// PutManifest stores the manifest, then answers with this code: the response was lost.
     commit_then_fail: Option<Code>,
     put_delay: Duration,
@@ -149,7 +152,12 @@ impl ChunkStoreService for ChunkSvc {
         &self,
         _: Request<pb::ChunkStoreNodeInfoRequest>,
     ) -> Rpc<pb::ChunkStoreNodeInfoResponse> {
-        Ok(Response::new(pb::ChunkStoreNodeInfoResponse::default()))
+        let f = self.0.lock().unwrap();
+        Ok(Response::new(pb::ChunkStoreNodeInfoResponse {
+            node_id: f.node_id.clone(),
+            healthy: !f.node_unhealthy,
+            ..Default::default()
+        }))
     }
 }
 
@@ -279,6 +287,7 @@ async fn listen() -> (tokio_stream::wrappers::TcpListenerStream, String) {
 async fn cluster(deadlines: Deadlines) -> Cluster {
     let state: Shared = Default::default();
     state.lock().unwrap().buckets.insert("b".into());
+    state.lock().unwrap().node_id = "n1".into();
     let (chunk_in, chunk_addr) = listen().await;
     let (index_in, index_addr) = listen().await;
     let s = state.clone();
@@ -620,4 +629,118 @@ fn chunk_ids_must_be_32_lowercase_hex() {
     assert!(!valid_chunk_id("abcd"));
     assert!(!valid_chunk_id(&"A".repeat(32)));
     assert!(!valid_chunk_id(&format!("../{}", "a".repeat(29))));
+}
+
+/// A fake chunk node of its own that reports `id`, and its address.
+async fn node(id: &str) -> (Shared, String) {
+    let state: Shared = Default::default();
+    state.lock().unwrap().node_id = id.into();
+    let (incoming, addr) = listen().await;
+    tokio::spawn(
+        tonic::transport::Server::builder()
+            .add_service(ChunkStoreServiceServer::new(ChunkSvc(state.clone())))
+            .serve_with_incoming(incoming),
+    );
+    (state, addr)
+}
+
+async fn two_nodes() -> (Shared, Shared, RemoteChunkStore) {
+    let (s1, a1) = node("n1").await;
+    let (s2, a2) = node("n2").await;
+    let store = RemoteChunkStore::connect_lazy(
+        &[("n1".into(), a1), ("n2".into(), a2)],
+        Deadlines::default(),
+    )
+    .unwrap();
+    (s1, s2, store)
+}
+
+#[tokio::test]
+async fn startup_accepts_nodes_that_report_their_configured_id() {
+    let (_, _, store) = two_nodes().await;
+    store.verify_node_ids(Duration::ZERO).await.unwrap();
+}
+
+#[tokio::test]
+async fn startup_refuses_a_node_that_reports_another_id() {
+    let (s1, _, store) = two_nodes().await;
+    s1.lock().unwrap().node_id = "n2".into(); // n1's address now points at node 2's host
+    let err = store.verify_node_ids(Duration::ZERO).await.unwrap_err();
+    assert!(err.to_string().contains(r#"reports id "n2""#), "{err}");
+}
+
+#[tokio::test]
+async fn startup_tolerates_a_node_that_is_not_up_yet() {
+    let store = RemoteChunkStore::connect_lazy(
+        &[("n1".into(), "127.0.0.1:1".into())],
+        Deadlines::default(),
+    )
+    .unwrap();
+    store.verify_node_ids(Duration::ZERO).await.unwrap();
+}
+
+#[tokio::test]
+async fn placement_skips_an_unhealthy_node_and_returns_when_it_recovers() {
+    let (s1, _, store) = two_nodes().await;
+    assert_eq!(store.nodes(), ["n1", "n2"]);
+    s1.lock().unwrap().node_unhealthy = true;
+    store.refresh_health().await;
+    assert_eq!(store.nodes(), ["n2"]);
+    s1.lock().unwrap().node_unhealthy = false;
+    store.refresh_health().await;
+    assert_eq!(store.nodes(), ["n1", "n2"]);
+}
+
+#[tokio::test]
+async fn placement_skips_a_node_that_swapped_ids_after_startup() {
+    let (s1, _, store) = two_nodes().await;
+    s1.lock().unwrap().node_id = "n9".into();
+    store.refresh_health().await;
+    assert_eq!(store.nodes(), ["n2"]);
+}
+
+#[tokio::test]
+async fn placement_skips_a_node_that_just_ran_out_of_disk() {
+    let (s1, _, store) = two_nodes().await;
+    s1.lock().unwrap().chunk_fail = Some((Code::ResourceExhausted, "full".into()));
+    let err = store
+        .put("n1", &id(1), Bytes::from_static(b"x"))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::DiskFull), "{err:?}");
+    assert_eq!(store.nodes(), ["n2"]);
+    assert_eq!(
+        store.configured_nodes(),
+        ["n1", "n2"],
+        "GC still lists both"
+    );
+}
+
+#[tokio::test]
+async fn placement_falls_back_to_all_nodes_when_none_looks_healthy() {
+    let (s1, s2, store) = two_nodes().await;
+    s1.lock().unwrap().node_unhealthy = true;
+    s2.lock().unwrap().node_unhealthy = true;
+    store.refresh_health().await;
+    assert_eq!(
+        store.nodes(),
+        ["n1", "n2"],
+        "a stale view must not refuse every write"
+    );
+}
+
+#[tokio::test]
+async fn put_object_writes_every_chunk_to_the_healthy_node() {
+    let c = cluster(Deadlines::default()).await; // only its index is used
+    let (s1, s2, store) = two_nodes().await;
+    s1.lock().unwrap().node_unhealthy = true;
+    store.refresh_health().await;
+    let data = vec![5u8; 16 * 20]; // 20 chunks: with two live nodes about half would hit n1
+    let m = put_object(body(&data), "b", "k", "x", &limits(), &*c.index, &store)
+        .await
+        .unwrap();
+    assert_eq!(m.chunks.len(), 20);
+    assert!(m.chunks.iter().all(|r| r.node_id == "n2"));
+    assert!(s1.lock().unwrap().chunks.is_empty());
+    assert_eq!(s2.lock().unwrap().chunks.len(), 20);
 }

@@ -45,7 +45,7 @@ pub trait ObjectIndex: Send + Sync {
 /// and every call names it.
 #[async_trait::async_trait]
 pub trait ChunkStore: Send + Sync {
-    /// Node ids new chunks can be placed on. Never empty.
+    /// Node ids new chunks can be placed on right now. Never empty.
     fn nodes(&self) -> Vec<String>;
     /// Durable when it returns.
     async fn put(&self, node: &str, chunk_id: &str, data: Bytes) -> Result<()>;

@@ -63,6 +63,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &parse_nodes(&nodes)?,
                 deadlines,
             )?);
+            // The ids end up in every manifest, so a swapped address must stop the start, not corrupt data.
+            chunks.verify_node_ids(Duration::from_secs(10)).await?;
+            chunks.spawn_health_refresh(env_secs("TS2_HEALTH_INTERVAL_SECS", 5)?);
             let cfg = GcConfig {
                 min_age: env_secs("TS2_GC_MIN_AGE_SECS", 3600)?,
                 interval: env_secs("TS2_GC_INTERVAL_SECS", 600)?,
