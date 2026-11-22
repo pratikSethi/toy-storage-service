@@ -15,6 +15,8 @@ COPY . .
 RUN cargo build --release -p ts2-frontdoor
 
 FROM --platform=linux/arm64 debian:bookworm-slim
+# curl is for the compose healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/ts2-frontdoor /usr/local/bin/ts2-frontdoor
 EXPOSE 9000
 ENTRYPOINT ["ts2-frontdoor", "/etc/ts2/frontdoor.yaml"]

@@ -48,7 +48,7 @@ async fn inline_then_chunked_roundtrip_and_range() {
 async fn too_large_deletes_written_chunks() {
     let dir = tempfile::tempdir().unwrap();
     let (index, chunks) = setup(dir.path()).await;
-    let big = vec![1u8; 101];
+    let big = [1u8; 101];
     let r = put_object(body(&[&big[..50], &big[50..]]), "b", "k", "x", &limits(), &index, &*chunks).await;
     assert!(matches!(r, Err(Error::ObjectTooLarge { .. })));
     assert_eq!(chunk_files(dir.path()), 0);

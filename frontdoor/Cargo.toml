@@ -4,4 +4,24 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+axum = "0.8.9"
+bytes = "1.12.2"
+chrono = "0.4.45"
+futures-util = "0.3.34"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+serde_yaml_ng = "0.10.0"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "fs"] }
+tower = { version = "0.5.3", features = ["util"] }
+tower-http = { version = "0.7.1", features = ["trace", "request-id", "set-header", "propagate-header", "fs"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["json", "env-filter"] }
 ts2-core = { path = "../ts2-core" }
+utoipa = { version = "5", features = ["chrono"] }
+utoipa-scalar = { version = "0.3", features = ["axum"] }
+uuid = { version = "1.29.3", features = ["v4"] }
+
+[dev-dependencies]
+http-body-util = "0.1.5"
+serde_json = "1.0.154"
+tempfile = "3.27.0"

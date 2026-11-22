@@ -9,5 +9,10 @@ services:
     volumes:
       - ts2-data:/data
       - ../../config/frontdoor.compose.yaml:/etc/ts2/frontdoor.yaml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 volumes:
   ts2-data:

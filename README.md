@@ -2,7 +2,7 @@
 
 TS2 (Toy Storage Service) is an S3-like object store that you can run on a laptop. It is a learning build by Pratik Sethi, made to understand how an object store works inside.
 
-**Status:** docs only. Nothing is implemented yet, and it is not durable in v0.
+**Status:** v0.1 frontdoor runs locally. It is not durable in v0.
 
 **Architecture:** three services, `frontdoor` (Rust) takes requests and moves object bytes, `index` (C++) maps keys to manifests, and `chunkstore` (C++) stores chunks. A `registry` (buckets, tenants, quotas) starts as a frontdoor module and becomes a Go service in v0.4. The `ts2` CLI is Python.
 
@@ -51,7 +51,7 @@ docs/
 
 ## Reading the docs
 
-Start at [docs/README.md](docs/README.md). Once the scaffold lands, `uv run mkdocs serve` serves them locally.
+Start at [docs/README.md](docs/README.md). `make docs` serves them locally. To try the API, see the [demo](docs/demo.md).
 
 ## License
 

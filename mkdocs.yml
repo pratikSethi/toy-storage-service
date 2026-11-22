@@ -7,6 +7,7 @@ nav:
   - Backlog: backlog.md
   - Plan: plan.md
   - PRD: prd.md
+  - Demo: demo.md
   - Design:
       - 000 System overview: design/000-system-overview.md
   - ADRs:

@@ -1,0 +1,424 @@
+openapi: 3.1.0
+info:
+  title: TS2 frontdoor
+  description: JSON REST object store. Errors are RFC 9457 problem details.
+  license:
+    name: ''
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      tags:
+      - handlers
+      operationId: healthz
+      responses:
+        '200':
+          description: Alive
+          content:
+            text/plain:
+              schema:
+                type: string
+  /v1/buckets:
+    get:
+      tags:
+      - handlers
+      operationId: list_buckets
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BucketList'
+    post:
+      tags:
+      - handlers
+      operationId: create_bucket
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBucket'
+        required: true
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BucketInfo'
+        '400':
+          description: invalid-bucket-name
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: bucket-exists
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/buckets/{bucket}:
+    get:
+      tags:
+      - handlers
+      operationId: get_bucket
+      parameters:
+      - name: bucket
+        in: path
+        description: Bucket name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BucketInfo'
+        '404':
+          description: bucket-not-found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    delete:
+      tags:
+      - handlers
+      operationId: delete_bucket
+      parameters:
+      - name: bucket
+        in: path
+        description: Bucket name
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: bucket-not-found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: bucket-not-empty
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/buckets/{bucket}/objects:
+    get:
+      tags:
+      - handlers
+      operationId: list_objects
+      parameters:
+      - name: bucket
+        in: path
+        description: Bucket name
+        required: true
+        schema:
+          type: string
+      - name: prefix
+        in: path
+        description: Only keys starting with this prefix.
+        required: true
+        schema:
+          type:
+          - string
+          - 'null'
+      - name: start_after
+        in: path
+        description: Only keys after this one, in bytewise order.
+        required: true
+        schema:
+          type:
+          - string
+          - 'null'
+      - name: max_keys
+        in: path
+        description: Page size, default and maximum 1000.
+        required: true
+        schema:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectList'
+        '404':
+          description: bucket-not-found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/buckets/{bucket}/objects/{key}:
+    get:
+      tags:
+      - handlers
+      operationId: get_object
+      parameters:
+      - name: bucket
+        in: path
+        description: Bucket name
+        required: true
+        schema:
+          type: string
+      - name: key
+        in: path
+        description: Object key, may contain slashes
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Object bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+        '206':
+          description: 'Requested byte range. Supported forms: bytes=a-b, bytes=a-, bytes=-n'
+        '404':
+          description: bucket-not-found or object-not-found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '416':
+          description: range-not-satisfiable (multi-range is not supported)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    put:
+      tags:
+      - handlers
+      operationId: put_object
+      parameters:
+      - name: bucket
+        in: path
+        description: Bucket name
+        required: true
+        schema:
+          type: string
+      - name: key
+        in: path
+        description: Object key, may contain slashes
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+        required: true
+      responses:
+        '201':
+          description: ''
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: Quoted hex sha256 of the object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PutResult'
+        '400':
+          description: invalid-key
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: bucket-not-found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '413':
+          description: object-too-large
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    delete:
+      tags:
+      - handlers
+      operationId: delete_object
+      parameters:
+      - name: bucket
+        in: path
+        description: Bucket name
+        required: true
+        schema:
+          type: string
+      - name: key
+        in: path
+        description: Object key, may contain slashes
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: bucket-not-found or object-not-found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    head:
+      tags:
+      - handlers
+      operationId: head_object
+      parameters:
+      - name: bucket
+        in: path
+        description: Bucket name
+        required: true
+        schema:
+          type: string
+      - name: key
+        in: path
+        description: Object key, may contain slashes
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Object headers only
+        '404':
+          description: bucket-not-found or object-not-found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  schemas:
+    BucketInfo:
+      type: object
+      required:
+      - name
+      - created_at
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        name:
+          type: string
+    BucketList:
+      type: object
+      required:
+      - buckets
+      properties:
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/BucketInfo'
+    CreateBucket:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          description: '3 to 63 characters: lowercase letters, digits, hyphens.'
+          example: photos
+    ObjectInfo:
+      type: object
+      required:
+      - key
+      - size
+      - etag
+      - last_modified
+      properties:
+        etag:
+          type: string
+        key:
+          type: string
+        last_modified:
+          type: string
+          format: date-time
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+    ObjectList:
+      type: object
+      required:
+      - objects
+      - is_truncated
+      properties:
+        is_truncated:
+          type: boolean
+        next_start_after:
+          type:
+          - string
+          - 'null'
+          description: Pass as `start_after` to get the next page.
+        objects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectInfo'
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      required:
+      - type
+      - title
+      - status
+      - detail
+      - instance
+      - request_id
+      properties:
+        detail:
+          type: string
+        instance:
+          type: string
+          description: The request path.
+        request_id:
+          type: string
+        status:
+          type: integer
+          format: int32
+          minimum: 0
+        title:
+          type: string
+        type:
+          type: string
+          description: URI reference identifying the problem type.
+          example: https://ts2.dev/problems/object-not-found
+    PutResult:
+      type: object
+      required:
+      - bucket
+      - key
+      - size
+      - etag
+      - version
+      properties:
+        bucket:
+          type: string
+        etag:
+          type: string
+        key:
+          type: string
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+        version:
+          type: integer
+          format: int64
+          minimum: 0
