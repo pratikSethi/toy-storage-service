@@ -1,0 +1,13 @@
+# Rust
+target/
+# C++
+build/
+# Python
+.venv/
+__pycache__/
+# macOS
+.DS_Store
+# mkdocs output
+site/
+# Kiro
+**/.kiro/settings/
