@@ -13,6 +13,8 @@ Rules: add fields with new numbers, never reuse or renumber, never change a type
 
 ## Using it
 
-**C++ (grpc++).** Each service's CMake project runs `protoc` with the grpc plugin over `../proto` and links the generated sources. See `chunk-store/CMakeLists.txt`.
+**C++ (grpc++).** Both services include `cmake/ts2_proto.cmake`, which runs `protoc` with the grpc plugin over every file here and builds one `ts2_proto` library.
 
-**Rust (tonic, later).** The gateway will add a `build.rs` using `tonic-build` pointed at `../proto`, and call the services through the generated clients.
+**Rust (tonic).** The `ts2-proto` crate compiles both files with `tonic-prost-build` and exposes them as `ts2_proto::v1`. FrontdoorService will depend on it in round 4 step (c).
+
+Only the step 0 owner edits files here during round 4. The two service workers ask for a contract change instead of making it, so the Rust and C++ sides cannot drift.

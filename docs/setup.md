@@ -39,7 +39,7 @@ Homebrew cannot run inside a sandboxed agent chat, because its nested macOS sand
 
 ## vcpkg
 
-C++ has no built-in package manager. gRPC is too large, and needs `protoc` code generation, to vendor into the repo the way DuckDB vendors its small dependencies. vcpkg is free and MIT licensed. Each C++ service lists its dependencies in its own `vcpkg.json` (`chunk-store/vcpkg.json`, `object-index/vcpkg.json`), and the CMake presets load vcpkg through `$VCPKG_ROOT`.
+C++ has no built-in package manager. gRPC is too large, and needs `protoc` code generation, to vendor into the repo the way DuckDB vendors its small dependencies. vcpkg is free and MIT licensed. Both C++ services share one root `vcpkg.json` with a pinned `builtin-baseline`, so every machine, CI and Docker build the same versions and share one binary cache. The CMake presets load vcpkg through `$VCPKG_ROOT` and point `VCPKG_MANIFEST_DIR` at the repo root. Use a full clone (not `--depth 1`): vcpkg needs the baseline commit locally. To bump versions, change the baseline in `vcpkg.json` (a cold rebuild follows).
 
 Clone and bootstrap it. `-disableMetrics` turns off telemetry.
 
@@ -68,9 +68,21 @@ The first C++ build compiles gRPC from source and takes roughly 20 to 40 minutes
 
 ```sh
 cd chunk-store            # or object-index
-cmake --preset debug      # ASan and UBSan on
+cmake --preset debug      # UBSan on
 cmake --build --preset debug
 ctest --preset debug
+```
+
+There is also an `asan` preset (`-fsanitize=address,undefined`). On the author's Mac (vcpkg gRPC 1.84, protobuf 36) the `asan` build links but the NodeInfo test segfaults inside protobuf serialization, with and without UBSan. The cause is not found, so `asan` is not in CI yet. Try it on Linux first.
+
+Both services generate code from `proto/` through the shared `cmake/ts2_proto.cmake`.
+
+## protoc for Rust
+
+The `ts2-proto` crate compiles both protos with `tonic-prost-build`. It gets `protoc` from the `protoc-bin-vendored` build dependency, so no system `protoc` is needed (not on the Mac, in CI or in the frontdoor Docker build). Set `PROTOC` to use your own binary instead, for example the one vcpkg builds under `chunk-store/build/debug/vcpkg_installed/<triplet>/tools/protobuf/`.
+
+```sh
+cargo build -p ts2-proto
 ```
 
 ## Check your setup

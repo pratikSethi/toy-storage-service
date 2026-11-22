@@ -8,6 +8,7 @@ When you upload an object, its bytes end up as chunks on storage nodes. The mani
 
 - Buckets: create, get, delete (only when empty), list.
 - Manifests: put (the commit point of an upload, assigns the version), get, delete, and listing keys by prefix in order.
+- `ListChunkRefs`: every chunk reference in every manifest, so FrontdoorService can find orphan chunks. Orphan GC itself is not done here.
 - Durability of that metadata, in SQLite first.
 
 The contract is [`proto/ts2/v1/object_index.proto`](../proto/ts2/v1/object_index.proto), which mirrors the `ObjectIndex` trait in [`ts2-core`](../ts2-core/README.md). Today the skeleton answers `NodeInfo` only; every other RPC returns `UNIMPLEMENTED`.

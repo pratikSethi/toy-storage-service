@@ -79,7 +79,7 @@ What cells give us:
 | FrontdoorService | `frontdoor/` (binary `ts2-frontdoor`) | Rust | axum, tonic, tower, utoipa 5.x. Admission, routing, object data path. |
 | `ts2-core` | `ts2-core/` | Rust (library crate) | Chunking, hashing, placement, and the `ObjectIndex` and `ChunkStore` traits with their in-process SQLite and local-disk implementations. A direct-to-cell client could reuse it later. |
 | BucketRegistryService | in `frontdoor/` as `BucketRegistry` until v0.4, then `bucket-registry/` | Rust, then Go | Buckets, tenants, quotas, bucket-to-cell map. gRPC server from v0.4. |
-| ObjectIndexService | `object-index/` (not yet created) | C++ | Key to manifest, listing, orphan GC. SQLite first, RocksDB later. |
+| ObjectIndexService | `object-index/` (not yet created) | C++ | Key to manifest, listing, and the list of referenced chunks (`ListChunkRefs`) for GC. SQLite first, RocksDB later. |
 | ChunkStoreService | `chunk-store/` (not yet created) | C++ | One process, one node, one disk. CMake, vcpkg, Catch2. |
 | `ts2` CLI | `cli/` | Python | typer, httpx, client generated from the OpenAPI file; installed with `uv tool install`. |
 | Web UI | `ui/` | TypeScript | Later, React possible. |
@@ -231,7 +231,7 @@ Chunk ids are random 128-bit values. The content hash is stored beside the id as
 
 ## 7. On-disk layout
 
-Both layouts sit behind one ChunkStore interface: `put`, `get(range)`, `delete`, `list` (chunk ids with their creation time, for GC), and `scrub` later. In v0.1 the interface is the Rust `ChunkStore` trait in `ts2-core`. From the ChunkStoreService step it is a gRPC service implemented in C++.
+Both layouts sit behind one ChunkStore interface: `put`, `get(range)`, `delete`, `list` (chunk ids with their creation time, for GC). On disk each chunk is `<id>` plus a sidecar `<id>.sha256`, written to `tmp/` and renamed sidecar first, data last; a data file without a sidecar is corrupt and never served. C++ and Rust data dirs are not interchangeable, and `scrub` later. In v0.1 the interface is the Rust `ChunkStore` trait in `ts2-core`. From the ChunkStoreService step it is a gRPC service implemented in C++.
 
 **v0.1: one file per chunk.** MinIO style, easy to debug with `ls`.
 
@@ -311,7 +311,7 @@ To be written:
 
 - 001, FrontdoorService: admission, load shedding, routing, streaming and chunking.
 - 002, BucketRegistryService: tenants, buckets, quotas, bucket-to-cell map, cell health, jobs API.
-- 003, ObjectIndexService: manifest schema, transactions, list, orphan GC, SQLite then RocksDB.
+- 003, ObjectIndexService: manifest schema, transactions, list, chunk-ref listing for GC, SQLite then RocksDB.
 - 004, ChunkStoreService: ChunkStore, FileSystem abstraction, extents, scrub.
 - 005, Placement and replication: the placement rule, R=3, failure domains, erasure coding, repair.
 - 006, Observability: metric names, dashboards, alarms, SLO math.
@@ -321,7 +321,7 @@ To be written:
 
 ### Decisions
 
-- **Orphan chunk GC.** Owned by ObjectIndexService and diff-based. It periodically lists the chunk ids (with creation time) on each ChunkStoreService node and deletes ids that no manifest references. It never deletes a chunk younger than `gc_min_chunk_age` (default 24 h), because a chunk of an in-flight PUT looks like an orphan until its manifest commits. Nothing returns a chunk list on DELETE.
+- **Orphan chunk GC.** Owned by FrontdoorService (the only process that knows both the chunk nodes and the index) and diff-based, as a background task. Order matters: it lists the chunks on a ChunkStoreService node first, then pages through `ObjectIndexService.ListChunkRefs`, and deletes only chunks that are unreferenced and older than the minimum age. The reverse order could delete the chunk of an upload that commits between the two lists. It never deletes a chunk younger than `gc_min_chunk_age` (default 24 h), because a chunk of an in-flight PUT looks like an orphan until its manifest commits. Nothing returns a chunk list on DELETE.
 - **Index durability.** ObjectIndexService is a single process with one database per cell and no replica from v0.1 to v0.4. Replication and erasure coding protect chunks, not manifests, so losing the index loses every object in the cell. Mitigation: periodic backups of the database (SQLite online backup, later RocksDB checkpoints) to a separate volume, plus a restore drill.
 - **Overwrite.** A second PUT replaces the manifest and increments `version`. The old chunks become orphans for GC. No user-visible object versioning in v0.
 - **ETag.** Hex SHA-256 of the whole object, computed by FrontdoorService from the stream. From v0.2 a client may send `x-ts2-checksum-sha256`, and a mismatch returns 400.
