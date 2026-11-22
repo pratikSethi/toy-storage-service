@@ -11,8 +11,8 @@ TEST_CASE("NodeInfo reports the configured identity") {
   auto stub = ts2::v1::ObjectIndexService::NewStub(server->InProcessChannel({}));
 
   grpc::ClientContext ctx;
-  ts2::v1::NodeInfoRequest req;
-  ts2::v1::NodeInfoResponse resp;
+  ts2::v1::ObjectIndexNodeInfoRequest req;
+  ts2::v1::ObjectIndexNodeInfoResponse resp;
   auto status = stub->NodeInfo(&ctx, req, &resp);
 
   REQUIRE(status.ok());

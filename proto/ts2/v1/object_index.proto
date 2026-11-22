@@ -9,7 +9,13 @@ import "google/protobuf/timestamp.proto";
 //
 // Common errors on every RPC:
 //   UNAVAILABLE         the index is starting up or not the leader for this bucket.
-//   INTERNAL            storage failure.
+//   INTERNAL            storage failure, or a stored manifest that cannot be decoded.
+//
+// Validation at this trust boundary (the index is a separate process): bucket names are 3 to 63 of
+// a-z, 0-9 and '-' (ts2-core validate_bucket_name); keys must be non-empty, free of NUL and other control characters, and
+// have no `..` path segments; violations are INVALID_ARGUMENT. Key length limits are frontdoor
+// config and are NOT checked here. Round 4 adds shared test vectors under tests/vectors/ that the Rust and C++ tests both read.
+// Deadline the client should set: 5 s per call.
 service ObjectIndexService {
   // Creates a bucket.
   // Errors: ALREADY_EXISTS, INVALID_ARGUMENT (bad name).
@@ -28,7 +34,10 @@ service ObjectIndexService {
   // Commits a manifest atomically. The index assigns `version` (1 for a new key, previous + 1 on
   // overwrite) and returns the stored manifest. This is the commit point of an upload: chunks
   // become reachable only after this call succeeds.
-  // Errors: NOT_FOUND (bucket), INVALID_ARGUMENT (key too long, both or neither of inline_data and chunks).
+  // The caller (frontdoor) sets created_at; the index never rewrites it. The response carries the
+  // replaced manifest as `previous` so the caller can delete its chunks eagerly (GC is the safety net).
+  // There is no compare-and-set in v0.1.
+  // Errors: NOT_FOUND (bucket), INVALID_ARGUMENT (bad key, both or neither of inline_data and chunks).
   rpc PutManifest(PutManifestRequest) returns (PutManifestResponse);
 
   // Errors: NOT_FOUND (bucket or object; the message says which).
@@ -39,11 +48,20 @@ service ObjectIndexService {
   rpc DeleteManifest(DeleteManifestRequest) returns (Manifest);
 
   // Lists keys in bytewise order. Returns keys that start with `prefix` and sort after `start_after`.
-  // Errors: NOT_FOUND (bucket), INVALID_ARGUMENT (max_keys out of range).
+  // Errors: NOT_FOUND (bucket), INVALID_ARGUMENT (max_keys above the maximum).
   rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse);
 
+  // Lists every chunk reference in every manifest, across all buckets, for orphan garbage
+  // collection. Orphan GC is owned by FrontdoorService, not the index. Results are distinct by
+  // (chunk_id) and ascending by chunk_id; page_token is the last chunk_id returned. Not a
+  // consistent snapshot across pages.
+  // ORDERING RULE for GC: list chunks on the node first (ChunkStoreService.ListChunks), then call
+  // this, and delete only chunks that are unreferenced AND older than the minimum age (24 h).
+  // Errors: INVALID_ARGUMENT (bad page_token, page_size above the maximum).
+  rpc ListChunkRefs(ListChunkRefsRequest) returns (ListChunkRefsResponse);
+
   // Liveness and identity of this index instance. Also serves as the health check.
-  rpc NodeInfo(NodeInfoRequest) returns (NodeInfoResponse);
+  rpc NodeInfo(ObjectIndexNodeInfoRequest) returns (ObjectIndexNodeInfoResponse);
 }
 
 message Bucket {
@@ -52,14 +70,17 @@ message Bucket {
 }
 
 message ChunkRef {
+  // Exactly 32 lowercase hex characters.
   string chunk_id = 1;
-  string node_id = 2;
+  // Nodes holding a replica. Exactly one in v0.1; R entries from v0.4. Order is not significant.
+  repeated string node_ids = 2;
   uint64 length = 3;
-  // Hex sha256 of the chunk bytes.
+  // Lowercase hex sha256 of the chunk bytes (the Rust field is named `checksum`).
   string sha256 = 4;
 }
 
-// One per object key. `inline_data` and `chunks` are mutually exclusive.
+// One per object key. `inline_data` and `chunks` are mutually exclusive: exactly one is present.
+// The index assigns `version`; every other field, including created_at, is set by frontdoor.
 message Manifest {
   string bucket = 1;
   string key = 2;
@@ -70,7 +91,8 @@ message Manifest {
   string content_type = 6;
   google.protobuf.Timestamp created_at = 7;
   map<string, string> metadata = 8;
-  // Set for small objects. Presence matters, so an empty object is an empty value, not unset.
+  // Set for small objects. Presence matters, so an empty object is an empty value, not unset;
+  // C++ must test has_inline_data(), not !inline_data().empty().
   optional bytes inline_data = 9;
   uint64 chunk_bytes = 10;
   repeated ChunkRef chunks = 11;
@@ -90,8 +112,17 @@ message DeleteBucketResponse {}
 message ListBucketsRequest {}
 message ListBucketsResponse { repeated Bucket buckets = 1; }
 
-message PutManifestRequest { Manifest manifest = 1; }
-message PutManifestResponse { Manifest manifest = 1; }
+message PutManifestRequest {
+  Manifest manifest = 1;
+  // Reserved for a compare-and-set (expected_version / If-Match) after v0.1.
+  reserved 2, 3;
+}
+message PutManifestResponse {
+  // The stored manifest, with the assigned version.
+  Manifest manifest = 1;
+  // The manifest this call replaced. Unset when the key is new.
+  Manifest previous = 2;
+}
 message GetManifestRequest {
   string bucket = 1;
   string key = 2;
@@ -105,7 +136,21 @@ message ListObjectsRequest {
   string bucket = 1;
   string prefix = 2;
   string start_after = 3;
+  // 0 means the default (1000). The maximum is 1000; larger values are INVALID_ARGUMENT.
   uint32 max_keys = 4;
+}
+
+message ListChunkRefsRequest {
+  // 0 means the default (1000). The maximum is 10000; larger values are INVALID_ARGUMENT.
+  uint32 page_size = 1;
+  // Empty for the first page; otherwise next_page_token of the previous response (the last chunk id).
+  string page_token = 2;
+}
+
+message ListChunkRefsResponse {
+  repeated ChunkRef refs = 1;
+  // Empty when there are no more pages.
+  string next_page_token = 2;
 }
 
 message ListObjectsResponse {
@@ -115,9 +160,9 @@ message ListObjectsResponse {
   string next_start_after = 3;
 }
 
-message NodeInfoRequest {}
+message ObjectIndexNodeInfoRequest {}
 
-message NodeInfoResponse {
+message ObjectIndexNodeInfoResponse {
   string node_id = 1;
   string cell = 2;
   bool healthy = 3;

@@ -19,8 +19,8 @@ class ChunkStoreServiceImpl final : public v1::ChunkStoreService::Service {
  public:
   explicit ChunkStoreServiceImpl(NodeConfig config) : config_(std::move(config)) {}
 
-  grpc::Status NodeInfo(grpc::ServerContext*, const v1::NodeInfoRequest*,
-                        v1::NodeInfoResponse* response) override;
+  grpc::Status NodeInfo(grpc::ServerContext*, const v1::ChunkStoreNodeInfoRequest*,
+                        v1::ChunkStoreNodeInfoResponse* response) override;
 
  private:
   NodeConfig config_;

@@ -1,5 +1,0 @@
-{
-  "name": "ts2-object-index",
-  "version": "0.0.1",
-  "dependencies": ["grpc", "protobuf", "spdlog", "catch2", "sqlite3"]
-}

@@ -11,8 +11,8 @@ TEST_CASE("NodeInfo reports the configured identity") {
   auto stub = ts2::v1::ChunkStoreService::NewStub(server->InProcessChannel({}));
 
   grpc::ClientContext ctx;
-  ts2::v1::NodeInfoRequest req;
-  ts2::v1::NodeInfoResponse resp;
+  ts2::v1::ChunkStoreNodeInfoRequest req;
+  ts2::v1::ChunkStoreNodeInfoResponse resp;
   auto status = stub->NodeInfo(&ctx, req, &resp);
 
   REQUIRE(status.ok());

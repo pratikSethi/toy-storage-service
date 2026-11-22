@@ -4,8 +4,8 @@
 
 namespace ts2 {
 
-grpc::Status ChunkStoreServiceImpl::NodeInfo(grpc::ServerContext*, const v1::NodeInfoRequest*,
-                                             v1::NodeInfoResponse* response) {
+grpc::Status ChunkStoreServiceImpl::NodeInfo(grpc::ServerContext*, const v1::ChunkStoreNodeInfoRequest*,
+                                             v1::ChunkStoreNodeInfoResponse* response) {
   std::error_code ec;
   auto space = std::filesystem::space(config_.data_dir, ec);
   response->set_node_id(config_.node_id);

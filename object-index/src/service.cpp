@@ -2,8 +2,8 @@
 
 namespace ts2 {
 
-grpc::Status ObjectIndexServiceImpl::NodeInfo(grpc::ServerContext*, const v1::NodeInfoRequest*,
-                                              v1::NodeInfoResponse* response) {
+grpc::Status ObjectIndexServiceImpl::NodeInfo(grpc::ServerContext*, const v1::ObjectIndexNodeInfoRequest*,
+                                              v1::ObjectIndexNodeInfoResponse* response) {
   response->set_node_id(config_.node_id);
   response->set_cell(config_.cell);
   response->set_healthy(true);

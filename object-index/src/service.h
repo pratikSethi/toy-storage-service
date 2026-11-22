@@ -18,8 +18,8 @@ class ObjectIndexServiceImpl final : public v1::ObjectIndexService::Service {
  public:
   explicit ObjectIndexServiceImpl(NodeConfig config) : config_(std::move(config)) {}
 
-  grpc::Status NodeInfo(grpc::ServerContext*, const v1::NodeInfoRequest*,
-                        v1::NodeInfoResponse* response) override;
+  grpc::Status NodeInfo(grpc::ServerContext*, const v1::ObjectIndexNodeInfoRequest*,
+                        v1::ObjectIndexNodeInfoResponse* response) override;
 
  private:
   NodeConfig config_;

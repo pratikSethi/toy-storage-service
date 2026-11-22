@@ -3,9 +3,22 @@ syntax = "proto3";
 package ts2.v1;
 
 // ChunkStoreService stores immutable chunks on one storage node.
-// Chunk ids are random 128-bit values chosen by the gateway (ADR 0003), written as lowercase hex.
-// They are not derived from content; the sha256 is stored beside the id and verified on read.
-// A chunk never changes after it is stored.
+// Chunk ids are random 128-bit values chosen by the gateway (ADR 0003). A valid id is exactly 32
+// lowercase hex characters; anything else is INVALID_ARGUMENT on every RPC (the id becomes a file
+// name, so this is also the path traversal guard).
+// Ids are not derived from content. The sha256 is stored in a sidecar file `<id>.sha256` beside the
+// data file `<id>` and verified on read. A chunk never changes after it is stored.
+//
+// On-disk rule (all C++ nodes): write data and sidecar to `tmp/<id>.<random>`, fsync both, rename the
+// sidecar into place first and the data file last, then fsync the directory. A data file without a
+// sidecar is corrupt: it is reported (ListChunks, startup scan) and never served. The C++ and Rust
+// (`ts2-core` LocalChunkStore) data dirs are NOT interchangeable: the Rust store writes no sidecar.
+//
+// Message size: no message carries more than 1 MiB (1048576 bytes) of chunk data. Servers set
+// max_receive_message_size to 1 MiB + 1 KiB (framing slack) and never send a larger frame.
+// A 4 MiB chunk is therefore at least 4 frames. gRPC's 4 MiB default is not used.
+//
+// Deadlines the client should set: 30 s for PutChunk, 10 s for GetChunk, 5 s for the rest.
 //
 // Common errors on every RPC:
 //   UNAVAILABLE         the node is starting up or draining.
@@ -13,36 +26,53 @@ package ts2.v1;
 service ChunkStoreService {
   // Stores one chunk. The first message must be `header`, every later message must be `data`.
   // The node writes to a temp file, verifies length and sha256, fsyncs, then renames into place.
-  // Putting a chunk that already exists with the same bytes succeeds (idempotent).
+  // Idempotency: if the chunk already exists and its stored sidecar sha256 equals expected_sha256,
+  // the call succeeds (the payload is still drained, not rewritten). If it exists with a different
+  // sha256 the call fails with ALREADY_EXISTS (ids are random, so this signals a bug).
   // Errors:
-  //   INVALID_ARGUMENT    first message is not a header, bad chunk id, or a data frame before the header.
-  //   PERMISSION_DENIED   write token is missing, expired or not valid for this chunk id.
-  //   DATA_LOSS           received length or sha256 differs from the header; nothing is stored.
+  //   INVALID_ARGUMENT    first message is not a header, a second header mid-stream, a data frame
+  //                       larger than 1 MiB, bad chunk id, or the received length or sha256 differs
+  //                       from the header (a transit fault, safe to retry; nothing is stored).
+  //   ALREADY_EXISTS      the chunk exists with a different sha256.
+  //   PERMISSION_DENIED   only when TS2_REQUIRE_TOKEN is on: write_token is missing, expired or not
+  //                       valid for this chunk id. With it off (the v0.1 default) an empty token is
+  //                       accepted and a non-empty one is ignored. Tokens arrive in v0.2.
   //   RESOURCE_EXHAUSTED  not enough free space.
+  // DATA_LOSS is never returned by PutChunk; it is reserved for read-time corruption.
   rpc PutChunk(stream PutChunkRequest) returns (PutChunkResponse);
 
-  // Streams a chunk, or a byte range of it, in frames. The node re-verifies the stored checksum
-  // for whole-chunk reads before the last frame.
+  // Streams a chunk, or a byte range of it, in frames of at most 1 MiB. The node reads the whole
+  // chunk (at most chunk_bytes, 4 MiB) and verifies it against the sidecar sha256 BEFORE sending the
+  // first frame, for ranged reads too, then streams slices. A failed check returns DATA_LOSS with no
+  // data frames. FrontdoorService additionally checks against the manifest checksum.
   // Errors:
-  //   NOT_FOUND           no such chunk.
-  //   OUT_OF_RANGE        the range ends past the chunk length.
-  //   DATA_LOSS           stored bytes fail their checksum.
+  //   INVALID_ARGUMENT    bad chunk id, or range_end != 0 and range_end <= range_start.
+  //   NOT_FOUND           no data file for this id.
+  //   OUT_OF_RANGE        range_start or range_end is past the chunk length.
+  //   DATA_LOSS           stored bytes fail their checksum, or the sidecar is missing.
   rpc GetChunk(GetChunkRequest) returns (stream GetChunkResponse);
 
-  // Removes a chunk. Used by orphan garbage collection and to roll back a failed upload. Deleting a chunk that does not exist succeeds (idempotent).
+  // Removes a chunk (sidecar first, then data file). Used by orphan garbage collection and to roll
+  // back a failed upload. Deleting a chunk that does not exist succeeds (idempotent).
   // Errors:
-  //   PERMISSION_DENIED   caller is not allowed to delete.
+  //   INVALID_ARGUMENT    bad chunk id.
+  //   PERMISSION_DENIED   only when TS2_REQUIRE_TOKEN is on (v0.2); never returned in v0.1.
   rpc DeleteChunk(DeleteChunkRequest) returns (DeleteChunkResponse);
 
   // Lists chunk ids on this node in ascending order, one page at a time. Orphan garbage collection
-  // (owned by ObjectIndexService) diffs this against the manifests to find unreferenced chunks.
+  // is owned by FrontdoorService: it diffs this against ObjectIndexService.ListChunkRefs.
+  // ORDERING RULE for GC: list chunks first, then list chunk refs, delete only chunks that are
+  // unreferenced AND older than the minimum age (24 h, ChunkInfo.created_unix). The reverse order
+  // would delete the chunk of an upload that commits between the two lists.
+  // Data files with no sidecar are listed with `corrupt = true`. Temp files and sidecars are never
+  // listed.
   // Errors:
-  //   INVALID_ARGUMENT    bad page_token or page_size.
+  //   INVALID_ARGUMENT    bad page_token, or page_size above the maximum.
   rpc ListChunks(ListChunksRequest) returns (ListChunksResponse);
 
   // Liveness and placement facts about this node. Also serves as the health check.
   // Errors: none besides the common ones.
-  rpc NodeInfo(NodeInfoRequest) returns (NodeInfoResponse);
+  rpc NodeInfo(ChunkStoreNodeInfoRequest) returns (ChunkStoreNodeInfoResponse);
 }
 
 message PutChunkRequest {
@@ -53,11 +83,13 @@ message PutChunkRequest {
 }
 
 message PutChunkHeader {
+  // Exactly 32 lowercase hex characters.
   string chunk_id = 1;
   uint64 expected_length = 2;
-  // Hex sha256 of the whole chunk.
+  // Lowercase hex sha256 of the whole chunk (64 characters).
   string expected_sha256 = 3;
-  // Opaque token issued by the gateway that authorizes this write.
+  // Opaque token issued by the gateway that authorizes this write. Optional in v0.1: an empty
+  // token is accepted when TS2_REQUIRE_TOKEN is off (the default).
   string write_token = 4;
 }
 
@@ -85,9 +117,11 @@ message DeleteChunkRequest {
 message DeleteChunkResponse {}
 
 message ListChunksRequest {
-  // 0 lets the node choose.
+  // 0 means the default (1000). The maximum is 10000; larger values are INVALID_ARGUMENT.
   uint32 page_size = 1;
-  // Empty for the first page; otherwise the next_page_token of the previous response.
+  // Empty for the first page; otherwise the next_page_token of the previous response, which is the
+  // last chunk id returned. The next page starts at the first id strictly greater than it. A token
+  // that is not a valid chunk id is INVALID_ARGUMENT; one past the end returns an empty page.
   string page_token = 2;
 }
 
@@ -100,13 +134,17 @@ message ListChunksResponse {
 message ChunkInfo {
   string chunk_id = 1;
   uint64 length = 2;
-  // Seconds since the Unix epoch. GC never deletes chunks younger than gc_min_chunk_age.
+  // Seconds since the Unix epoch, taken from the data file mtime. GC never deletes chunks younger
+  // than the minimum age. Restoring a data dir with cp or rsync without -p resets mtimes and makes
+  // every chunk look young, which is the safe direction.
   int64 created_unix = 3;
+  // True for a data file with no sidecar. Such a chunk is not served.
+  bool corrupt = 4;
 }
 
-message NodeInfoRequest {}
+message ChunkStoreNodeInfoRequest {}
 
-message NodeInfoResponse {
+message ChunkStoreNodeInfoResponse {
   string node_id = 1;
   string cell = 2;
   string failure_domain = 3;
