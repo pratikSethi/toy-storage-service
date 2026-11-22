@@ -8,7 +8,9 @@ use std::sync::Arc;
 use std::time::Instant;
 
 const REQUEST_ID: HeaderName = HeaderName::from_static("x-ts2-request-id");
-const LATENCY_BUCKETS: [f64; 12] = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
+const LATENCY_BUCKETS: [f64; 12] = [
+    0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+];
 
 pub struct Metrics {
     requests: Counter<u64>,
@@ -28,7 +30,9 @@ impl Metrics {
                 .build(),
             bytes_in: meter.u64_counter("ts2_http_request_bytes_total").build(),
             bytes_out: meter.u64_counter("ts2_http_response_bytes_total").build(),
-            inflight: meter.i64_up_down_counter("ts2_http_inflight_requests").build(),
+            inflight: meter
+                .i64_up_down_counter("ts2_http_inflight_requests")
+                .build(),
         })
     }
 }
@@ -66,7 +70,11 @@ fn operation(method: &str, route: &str) -> &'static str {
 pub async fn track(metrics: Arc<Metrics>, req: Request, next: Next) -> Response {
     let method = req.method().to_string();
     // The route template keeps label cardinality bounded; unmatched paths collapse into one label.
-    let route = req.extensions().get::<MatchedPath>().map_or("unmatched", |p| p.as_str()).to_owned();
+    let route = req
+        .extensions()
+        .get::<MatchedPath>()
+        .map_or("unmatched", |p| p.as_str())
+        .to_owned();
     let operation = operation(&method, &route);
     let request_id = req
         .headers()
@@ -87,7 +95,9 @@ pub async fn track(metrics: Arc<Metrics>, req: Request, next: Next) -> Response 
     metrics.inflight.add(-1, &[]);
 
     let status = res.status().as_u16();
-    let bytes_out = axum::body::HttpBody::size_hint(res.body()).exact().unwrap_or(0);
+    let bytes_out = axum::body::HttpBody::size_hint(res.body())
+        .exact()
+        .unwrap_or(0);
     let labels = [
         KeyValue::new("method", method.clone()),
         KeyValue::new("route", route.clone()),

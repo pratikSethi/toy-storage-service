@@ -19,14 +19,21 @@ impl LocalChunkStore {
         }
         fs::create_dir_all(&tmp)?;
         fs::create_dir_all(root.join("data/chunks"))?;
-        Ok(Self { root: root.to_owned() })
+        Ok(Self {
+            root: root.to_owned(),
+        })
     }
 
     fn path(&self, id: &str) -> Result<PathBuf> {
         if id.len() < 4 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(Error::Internal(format!("bad chunk id {id:?}")));
         }
-        Ok(self.root.join("data/chunks").join(&id[0..2]).join(&id[2..4]).join(id))
+        Ok(self
+            .root
+            .join("data/chunks")
+            .join(&id[0..2])
+            .join(&id[2..4])
+            .join(id))
     }
 }
 
@@ -45,7 +52,9 @@ fn full_sync(f: &File) -> std::io::Result<()> {
 }
 
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
-    tokio::task::spawn_blocking(f).await.map_err(|e| Error::Internal(e.to_string()))?
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| Error::Internal(e.to_string()))?
 }
 
 #[async_trait::async_trait]

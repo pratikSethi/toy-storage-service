@@ -28,7 +28,13 @@ pub trait ObjectIndex: Send + Sync {
     async fn get_manifest(&self, bucket: &str, key: &str) -> Result<Manifest>;
     /// Returns the removed manifest so the caller can clean up its chunks.
     async fn delete_manifest(&self, bucket: &str, key: &str) -> Result<Manifest>;
-    async fn list(&self, bucket: &str, prefix: &str, start_after: &str, max_keys: usize) -> Result<ListPage>;
+    async fn list(
+        &self,
+        bucket: &str,
+        prefix: &str,
+        start_after: &str,
+        max_keys: usize,
+    ) -> Result<ListPage>;
 }
 
 /// Stores chunk bytes. Local disk in v0.1, a C++ service later.

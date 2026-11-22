@@ -14,7 +14,9 @@ fn place(_chunk_id: &str) -> &'static str {
 
 pub fn validate_bucket_name(name: &str) -> Result<()> {
     let ok = (3..=63).contains(&name.len())
-        && name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
     ok.then_some(()).ok_or(Error::InvalidBucketName)
 }
 
@@ -36,7 +38,11 @@ pub fn validate_key(key: &str, max_key_bytes: usize) -> Result<()> {
     Ok(())
 }
 
-async fn write_chunk(chunks: &dyn ChunkStore, data: Bytes, written: &mut Vec<ChunkRef>) -> Result<()> {
+async fn write_chunk(
+    chunks: &dyn ChunkStore,
+    data: Bytes,
+    written: &mut Vec<ChunkRef>,
+) -> Result<()> {
     let chunk_id = uuid::Uuid::new_v4().simple().to_string();
     chunks.put(&chunk_id, data.clone()).await?;
     written.push(ChunkRef {
@@ -63,7 +69,17 @@ where
     S: Stream<Item = std::io::Result<Bytes>> + Unpin,
 {
     let mut written = Vec::new();
-    let result = read_and_commit(&mut body, bucket, key, content_type, limits, index, chunks, &mut written).await;
+    let result = read_and_commit(
+        &mut body,
+        bucket,
+        key,
+        content_type,
+        limits,
+        index,
+        chunks,
+        &mut written,
+    )
+    .await;
     if result.is_err() {
         for c in &written {
             let _ = chunks.delete(&c.chunk_id).await;
@@ -91,7 +107,9 @@ where
         let data = item?;
         total += data.len() as u64;
         if total > limits.max_object_bytes {
-            return Err(Error::ObjectTooLarge { max: limits.max_object_bytes });
+            return Err(Error::ObjectTooLarge {
+                max: limits.max_object_bytes,
+            });
         }
         etag.update(&data);
         buf.extend_from_slice(&data);
@@ -124,12 +142,20 @@ where
 
 /// Streams bytes `start..end` (end exclusive, already clamped to the size). Each chunk that overlaps the
 /// range is read whole and checked against its checksum before it is sliced.
-pub fn object_stream(manifest: Manifest, chunks: Arc<dyn ChunkStore>, start: u64, end: u64) -> BoxStream<'static, Result<Bytes>> {
+pub fn object_stream(
+    manifest: Manifest,
+    chunks: Arc<dyn ChunkStore>,
+    start: u64,
+    end: u64,
+) -> BoxStream<'static, Result<Bytes>> {
     if start >= end {
         return stream::empty().boxed();
     }
     if let Some(data) = &manifest.inline_data {
-        return stream::once(std::future::ready(Ok(Bytes::copy_from_slice(&data[start as usize..end as usize])))).boxed();
+        return stream::once(std::future::ready(Ok(Bytes::copy_from_slice(
+            &data[start as usize..end as usize],
+        ))))
+        .boxed();
     }
     let cb = manifest.chunk_bytes;
     let manifest = Arc::new(manifest);
@@ -139,11 +165,14 @@ pub fn object_stream(manifest: Manifest, chunks: Arc<dyn ChunkStore>, start: u64
             async move {
                 let c = &m.chunks[i as usize];
                 let data = chunks.get(&c.chunk_id, None).await?;
-                if data.len() as u64 != c.length || hex::encode(Sha256::digest(&data)) != c.checksum {
+                if data.len() as u64 != c.length || hex::encode(Sha256::digest(&data)) != c.checksum
+                {
                     return Err(Error::Corrupt(c.chunk_id.clone()));
                 }
                 let base = i * cb;
-                Ok(data.slice((start.max(base) - base) as usize..(end.min(base + c.length) - base) as usize))
+                Ok(data.slice(
+                    (start.max(base) - base) as usize..(end.min(base + c.length) - base) as usize,
+                ))
             }
         })
         .boxed()
@@ -151,7 +180,12 @@ pub fn object_stream(manifest: Manifest, chunks: Arc<dyn ChunkStore>, start: u64
 
 /// Removes the manifest first, then its chunks, so a manifest never points at a missing chunk.
 /// Chunk deletes are best effort; a failure leaves orphans for a future GC.
-pub async fn delete_object(index: &dyn ObjectIndex, chunks: &dyn ChunkStore, bucket: &str, key: &str) -> Result<()> {
+pub async fn delete_object(
+    index: &dyn ObjectIndex,
+    chunks: &dyn ChunkStore,
+    bucket: &str,
+    key: &str,
+) -> Result<()> {
     for c in index.delete_manifest(bucket, key).await?.chunks {
         let _ = chunks.delete(&c.chunk_id).await;
     }
