@@ -1,0 +1,76 @@
+{
+  // One compound, "Debug TS2", runs the three servers natively. Then start "Debug ts2 CLI".
+  // See docs/engineering/debugging.md. Data lives under data/debug/ (gitignored). Ports are in docs/ports.md.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "ChunkStoreService",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/chunk-store/build/debug/ts2-chunk-store",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "TS2_LISTEN": "127.0.0.1:50051",
+        "TS2_DATA_DIR": "${workspaceFolder}/data/debug/chunks"
+      }
+    },
+    {
+      "name": "ObjectIndexService",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/object-index/build/debug/ts2-object-index",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "TS2_LISTEN": "127.0.0.1:50052",
+        "TS2_DATA_DIR": "${workspaceFolder}/data/debug/index"
+      }
+    },
+    {
+      // Remote mode: gRPC to the two services above. The deadlines are long so a breakpoint pause does not become a 504.
+      "name": "FrontdoorService (remote)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/ts2-frontdoor",
+      "args": ["${workspaceFolder}/.vscode/frontdoor.debug.yaml"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "TS2_INDEX_ADDR": "127.0.0.1:50052",
+        "TS2_CHUNK_NODES": "node-1=127.0.0.1:50051",
+        "TS2_DEADLINE_PUT_CHUNK_SECS": "3600",
+        "TS2_DEADLINE_GET_CHUNK_SECS": "3600",
+        "TS2_DEADLINE_OTHER_SECS": "3600",
+        "TS2_GC_MIN_AGE_SECS": "86400"
+      }
+    },
+    {
+      // Single process: ts2-core runs the index (SQLite) and chunk store in-process. Nothing else to start.
+      "name": "Debug frontdoor (in-process)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/ts2-frontdoor",
+      "args": ["${workspaceFolder}/.vscode/frontdoor.debug.yaml"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "ts2: build frontdoor (debug)"
+    },
+    {
+      "name": "Debug ts2 CLI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "ts2",
+      "args": ["cp", "${workspaceFolder}/data/debug/ten.bin", "ts2://demo/ten.bin"],
+      "python": "${workspaceFolder}/cli/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "env": { "TS2_ENDPOINT": "http://127.0.0.1:9000" },
+      "justMyCode": true,
+      "preLaunchTask": "ts2: prepare cli demo"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug TS2",
+      "configurations": ["ChunkStoreService", "ObjectIndexService", "FrontdoorService (remote)"],
+      "preLaunchTask": "ts2: build all (debug)",
+      "stopAll": true
+    }
+  ]
+}

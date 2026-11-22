@@ -27,6 +27,16 @@ fn env_secs(name: &str, default: u64) -> Result<Duration, String> {
     }
 }
 
+/// Per-call deadlines. The defaults are the proto values. Raise them to pause at a breakpoint without a 504.
+fn deadlines_from_env() -> Result<Deadlines, String> {
+    let d = Deadlines::default();
+    Ok(Deadlines {
+        put_chunk: env_secs("TS2_DEADLINE_PUT_CHUNK_SECS", d.put_chunk.as_secs())?,
+        get_chunk: env_secs("TS2_DEADLINE_GET_CHUNK_SECS", d.get_chunk.as_secs())?,
+        other: env_secs("TS2_DEADLINE_OTHER_SECS", d.other.as_secs())?,
+    })
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -47,13 +57,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("TS2_CHUNK_NODES"),
     ) {
         (Ok(addr), Ok(nodes)) => {
-            let index = Arc::new(RemoteObjectIndex::connect_lazy(
-                &addr,
-                Deadlines::default(),
-            )?);
+            let deadlines = deadlines_from_env()?;
+            let index = Arc::new(RemoteObjectIndex::connect_lazy(&addr, deadlines)?);
             let chunks = Arc::new(RemoteChunkStore::connect_lazy(
                 &parse_nodes(&nodes)?,
-                Deadlines::default(),
+                deadlines,
             )?);
             let cfg = GcConfig {
                 min_age: env_secs("TS2_GC_MIN_AGE_SECS", 3600)?,

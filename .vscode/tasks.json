@@ -1,0 +1,43 @@
+{
+  // Build tasks for the Debug TS2 launches. See docs/engineering/debugging.md.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ts2: build chunk-store (debug)",
+      "type": "shell",
+      "command": "cmake --build --preset debug",
+      "options": { "cwd": "${workspaceFolder}/chunk-store" },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "ts2: build object-index (debug)",
+      "type": "shell",
+      "command": "cmake --build --preset debug",
+      "options": { "cwd": "${workspaceFolder}/object-index" },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "ts2: build frontdoor (debug)",
+      "type": "shell",
+      "command": "cargo build -p ts2-frontdoor",
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "ts2: build all (debug)",
+      "dependsOn": [
+        "ts2: build chunk-store (debug)",
+        "ts2: build object-index (debug)",
+        "ts2: build frontdoor (debug)"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      // Sets up the CLI venv, a 10 MiB file and the demo bucket. The bucket may already exist, so mb failing is fine.
+      "label": "ts2: prepare cli demo",
+      "type": "shell",
+      "command": "uv sync --project cli && mkdir -p data/debug && head -c 10485760 /dev/urandom > data/debug/ten.bin && (cli/.venv/bin/ts2 mb demo || true)",
+      "problemMatcher": []
+    }
+  ]
+}

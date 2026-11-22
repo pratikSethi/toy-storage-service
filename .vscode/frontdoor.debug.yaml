@@ -1,0 +1,9 @@
+# FrontdoorService config for the Debug TS2 launches. Same limits as config/frontdoor.yaml, data under the gitignored data/.
+listen: 127.0.0.1:9000
+data_dir: ./data/debug/frontdoor
+sqlite_path: ./data/debug/frontdoor/index.db
+limits:
+  max_object_bytes: 268435456
+  max_key_bytes: 1024
+  inline_threshold_bytes: 65536
+  chunk_bytes: 4194304

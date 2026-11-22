@@ -68,6 +68,7 @@ nav:
       - Components: engineering/components.md
       - Service levels: engineering/service-levels.md
       - Operations: engineering/operations.md
+      - Debugging: engineering/debugging.md
       - System overview: design/000-system-overview.md
       - PRD: prd.md
       - ADRs:
