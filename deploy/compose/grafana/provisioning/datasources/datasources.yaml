@@ -11,3 +11,7 @@ datasources:
     type: victoriametrics-logs-datasource
     access: proxy
     url: http://victorialogs:9428
+  # Synthetic data for the Ops Review region/cell panels. Not real traffic.
+  - name: TestData
+    uid: testdata
+    type: grafana-testdata-datasource

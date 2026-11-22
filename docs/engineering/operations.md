@@ -71,7 +71,7 @@ One cell, `us-east-cell-c`, had a bad day on Nov 20. Because cells are separate,
 ## Dashboards
 
 - **Frontdoor dashboard (live).** Request rate, errors, latency by `operation`, bytes in and out. Start it with `make up-obs` and open [Grafana at localhost:3000](http://localhost:3000), dashboard `frontdoor`. It only works while the stack is running.
-- **Ops Review dashboard (planned, next).** Availability by region and by cell with the SLO lines drawn on, the same view as the heat map but from real data. It is on the [backlog](../backlog.md).
+- **Ops Review dashboard (live, partly synthetic).** `TS2 Ops Review` in Grafana. The top sections come from real metrics: Tier 0 and Tier 1 availability, error budget remaining, 1h and 5m burn rate with the 14.4x page line, PutObject and GetObject p99 against their targets, and the one durability proxy that exists today. The bottom section is region x day availability and a region and cell drill-down. That section is **synthetic** (Grafana TestData) until TS2 runs several regions and cells. To open it: run `make up-obs`, go to [localhost:3000](http://localhost:3000), sign in as `admin` / `admin`, and pick `TS2 Ops Review`. The definitions behind it are in [service levels](service-levels.md). The error budget panel uses the time range as its window, so set 30d for the monthly view. The dashboard file is `deploy/compose/grafana/dashboards/ops-review.json`.
 
 ## Weekly ops review
 

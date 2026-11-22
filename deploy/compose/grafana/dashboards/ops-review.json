@@ -1,0 +1,1063 @@
+{
+  "uid": "ts2-ops-review",
+  "title": "TS2 Ops Review",
+  "tags": [
+    "ts2",
+    "ops-review"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "links": [],
+  "editable": true,
+  "templating": {
+    "list": [
+      {
+        "name": "region",
+        "label": "region",
+        "type": "custom",
+        "query": "us-east,us-west,eu-west,ap-south",
+        "multi": false,
+        "includeAll": false,
+        "options": [],
+        "current": {
+          "text": "us-east",
+          "value": "us-east"
+        }
+      },
+      {
+        "name": "cell",
+        "label": "cell",
+        "type": "custom",
+        "query": "cell-1,cell-2,cell-3",
+        "multi": false,
+        "includeAll": true,
+        "options": [],
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": ".*"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Service levels (live metrics)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "text",
+      "title": "Reading this dashboard",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Source: `ts2_http_requests_total` and `ts2_http_request_duration_seconds` from FrontdoorService. A 5xx is bad, a 4xx is good. Targets are the illustrative numbers in [service levels](http://localhost:8000/engineering/service-levels/). The error budget uses the dashboard time range as its window, so set the range to 30d for the real view. Window: `$__range`."
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Tier 0 availability (range)",
+      "description": "Red below customer SLO 99.99%, amber up to internal SLO 99.995%, green above.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "vm"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 4,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.9998999999999999
+              },
+              {
+                "color": "green",
+                "value": 0.99995
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - (sum(increase(ts2_http_requests_total{operation=~\"PutObject|GetObject|HeadObject|DeleteObject\",status_class=\"5xx\"}[$__range])) or vector(0)) / sum(increase(ts2_http_requests_total{operation=~\"PutObject|GetObject|HeadObject|DeleteObject\"}[$__range]))",
+          "legendFormat": "Tier 0",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          },
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Tier 0 availability (5 min windows)",
+      "description": "5xx as bad. Lines: customer SLO 99.99%, internal SLO 99.995%.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "vm"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 4,
+        "w": 8,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            },
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.9998999999999999
+              },
+              {
+                "color": "green",
+                "value": 0.99995
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "decimals": 4,
+          "min": null
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - (sum(rate(ts2_http_requests_total{operation=~\"PutObject|GetObject|HeadObject|DeleteObject\",status_class=\"5xx\"}[5m])) or vector(0)) / sum(rate(ts2_http_requests_total{operation=~\"PutObject|GetObject|HeadObject|DeleteObject\"}[5m]))",
+          "legendFormat": "Tier 0",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Tier 1 availability (range)",
+      "description": "Red below customer SLO 99.9%, amber up to internal SLO 99.95%, green above.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "vm"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 4,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.9990000000000001
+              },
+              {
+                "color": "green",
+                "value": 0.9995
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - (sum(increase(ts2_http_requests_total{operation=~\"CreateBucket|DeleteBucket|GetBucket|ListBuckets|ListObjects\",status_class=\"5xx\"}[$__range])) or vector(0)) / sum(increase(ts2_http_requests_total{operation=~\"CreateBucket|DeleteBucket|GetBucket|ListBuckets|ListObjects\"}[$__range]))",
+          "legendFormat": "Tier 1",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          },
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Tier 1 availability (5 min windows)",
+      "description": "5xx as bad. Lines: customer SLO 99.9%, internal SLO 99.95%.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "vm"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 4,
+        "w": 8,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            },
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.9990000000000001
+              },
+              {
+                "color": "green",
+                "value": 0.9995
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "decimals": 4,
+          "min": null
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - (sum(rate(ts2_http_requests_total{operation=~\"CreateBucket|DeleteBucket|GetBucket|ListBuckets|ListObjects\",status_class=\"5xx\"}[5m])) or vector(0)) / sum(rate(ts2_http_requests_total{operation=~\"CreateBucket|DeleteBucket|GetBucket|ListBuckets|ListObjects\"}[5m]))",
+          "legendFormat": "Tier 1",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Tier 0 error budget remaining (range)",
+      "description": "1 minus (bad share of requests / internal budget 0.005%). Below 50% the next week favours reliability work. Below 0 the budget is spent.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "vm"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 4,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 0.5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - ((sum(increase(ts2_http_requests_total{operation=~\"PutObject|GetObject|HeadObject|DeleteObject\",status_class=\"5xx\"}[$__range])) or vector(0)) / sum(increase(ts2_http_requests_total{operation=~\"PutObject|GetObject|HeadObject|DeleteObject\"}[$__range]))) / 5e-05",
+          "legendFormat": "Tier 0",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          },
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Tier 0 burn rate (page at 14.4x)",
+      "description": "Error ratio divided by the internal budget 0.005%. Page (sev2) when both the 1h and 5m series are above 14.4.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "vm"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 10,
+        "w": 8,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            },
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 14.4
+              }
+            ]
+          },
+          "unit": "none",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum(rate(ts2_http_requests_total{operation=~\"PutObject|GetObject|HeadObject|DeleteObject\",status_class=\"5xx\"}[1h])) or vector(0)) / sum(rate(ts2_http_requests_total{operation=~\"PutObject|GetObject|HeadObject|DeleteObject\"}[1h])) / 5e-05",
+          "legendFormat": "1h",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "(sum(rate(ts2_http_requests_total{operation=~\"PutObject|GetObject|HeadObject|DeleteObject\",status_class=\"5xx\"}[5m])) or vector(0)) / sum(rate(ts2_http_requests_total{operation=~\"PutObject|GetObject|HeadObject|DeleteObject\"}[5m])) / 5e-05",
+          "legendFormat": "5m",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Tier 1 error budget remaining (range)",
+      "description": "1 minus (bad share of requests / internal budget 0.05%). Below 50% the next week favours reliability work. Below 0 the budget is spent.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "vm"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 10,
+        "w": 4,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 0.5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - ((sum(increase(ts2_http_requests_total{operation=~\"CreateBucket|DeleteBucket|GetBucket|ListBuckets|ListObjects\",status_class=\"5xx\"}[$__range])) or vector(0)) / sum(increase(ts2_http_requests_total{operation=~\"CreateBucket|DeleteBucket|GetBucket|ListBuckets|ListObjects\"}[$__range]))) / 0.0005",
+          "legendFormat": "Tier 1",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          },
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Tier 1 burn rate (page at 14.4x)",
+      "description": "Error ratio divided by the internal budget 0.05%. Page (sev2) when both the 1h and 5m series are above 14.4.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "vm"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 10,
+        "w": 8,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            },
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 14.4
+              }
+            ]
+          },
+          "unit": "none",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum(rate(ts2_http_requests_total{operation=~\"CreateBucket|DeleteBucket|GetBucket|ListBuckets|ListObjects\",status_class=\"5xx\"}[1h])) or vector(0)) / sum(rate(ts2_http_requests_total{operation=~\"CreateBucket|DeleteBucket|GetBucket|ListBuckets|ListObjects\"}[1h])) / 0.0005",
+          "legendFormat": "1h",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "(sum(rate(ts2_http_requests_total{operation=~\"CreateBucket|DeleteBucket|GetBucket|ListBuckets|ListObjects\",status_class=\"5xx\"}[5m])) or vector(0)) / sum(rate(ts2_http_requests_total{operation=~\"CreateBucket|DeleteBucket|GetBucket|ListBuckets|ListObjects\"}[5m])) / 0.0005",
+          "legendFormat": "5m",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          }
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Latency and durability",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "PutObject p99 latency",
+      "description": "Lines: internal SLO 200 ms (amber), customer SLO 250 ms (red). Measured at frontdoor until response headers.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "vm"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 8,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            },
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.2
+              },
+              {
+                "color": "red",
+                "value": 0.25
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(ts2_http_request_duration_seconds_bucket{operation=\"PutObject\"}[$__rate_interval])))",
+          "legendFormat": "PutObject",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "GetObject p99 latency",
+      "description": "Lines: internal SLO 80 ms (amber), customer SLO 100 ms (red). Measured at frontdoor until response headers.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "vm"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 17,
+        "w": 8,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            },
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.08
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(ts2_http_request_duration_seconds_bucket{operation=\"GetObject\"}[$__rate_interval])))",
+          "legendFormat": "GetObject",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          }
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Durability proxy: failed GetObject (5xx) in range",
+      "description": "Objects lost is only partly measured: a read of a manifest with missing chunks surfaces as a GetObject 5xx. Nothing counts it as a loss yet. Page at any non-zero value.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "vm"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 17,
+        "w": 4,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum(increase(ts2_http_requests_total{operation=\"GetObject\",status_class=\"5xx\"}[$__range])) or vector(0))",
+          "legendFormat": "5xx",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "vm"
+          },
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "text",
+      "title": "Durability proxies planned",
+      "gridPos": {
+        "x": 20,
+        "y": 17,
+        "w": 4,
+        "h": 7
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Planned, no metric yet**\n\n- Scrub checksum failures\n- Under-replicated chunks\n- Repair backlog\n- Time to repair, p99"
+      }
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "SYNTHETIC: region and cell availability",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 17,
+      "type": "text",
+      "title": "Synthetic data",
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Everything below is synthetic.** It is generated by the Grafana TestData datasource, not measured. TS2 runs one region and one cell today. These panels show the shape of the weekly review (region x day, then drill down to a cell) until TS2 runs multiple regions and cells. Colours use the tier thresholds, availability in percent."
+      }
+    },
+    {
+      "id": 18,
+      "type": "table",
+      "title": "Tier 0 availability, region x day (synthetic)",
+      "description": "Red below 99.99, amber to 99.995, green above.",
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 99.99
+              },
+              {
+                "color": "green",
+                "value": 99.995
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "D-.|Today"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "region,D-6,D-5,D-4,D-3,D-2,D-1,Today\nus-east,99.999,99.998,99.997,99.999,99.996,99.999,99.998\nus-west,99.999,99.9995,99.999,99.985,99.992,99.999,99.999\neu-west,99.998,99.999,99.9,99.995,99.999,99.999,99.997\nap-south,99.996,99.992,99.999,99.999,99.97,99.998,99.999"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "table",
+      "title": "Tier 1 availability, region x day (synthetic)",
+      "description": "Red below 99.9, amber to 99.95, green above.",
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 99.9
+              },
+              {
+                "color": "green",
+                "value": 99.95
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "D-.|Today"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "region,D-6,D-5,D-4,D-3,D-2,D-1,Today\nus-east,99.99,99.98,99.97,99.99,99.96,99.99,99.98\nus-west,99.99,99.99,99.99,99.93,99.96,99.99,99.99\neu-west,99.98,99.99,99.8,99.97,99.99,99.99,99.97\nap-south,99.97,99.92,99.99,99.99,99.9,99.98,99.99"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Tier 0 availability by cell for $region (synthetic)",
+      "description": "Pick region and cell with the variables above. Tier 0 thresholds.",
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 24,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 99.99
+              },
+              {
+                "color": "green",
+                "value": 99.995
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "D-.|Today"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "region,cell,D-6,D-5,D-4,D-3,D-2,D-1,Today\nus-east,cell-1,99.9986,99.9973,99.9972,99.9981,99.996,99.9987,99.9971\nus-east,cell-2,99.9989,99.9931,99.9928,99.9981,99.9912,99.9988,99.9945\nus-east,cell-3,99.9982,99.9974,99.9971,99.9997,99.996,99.9987,99.9988\nus-west,cell-1,99.9981,99.9999,99.9985,99.9843,99.9912,99.9986,99.9995\nus-west,cell-2,99.9983,99.9995,99.9992,99.9807,99.988,99.9981,99.9981\nus-west,cell-3,99.9984,99.9997,99.9988,99.9846,99.9921,99.9988,99.9985\neu-west,cell-1,99.9984,99.9993,99.8994,99.995,99.9989,99.9996,99.9973\neu-west,cell-2,99.9935,99.9998,99.8952,99.9908,99.9994,99.9983,99.9929\neu-west,cell-3,99.9971,99.9992,99.9004,99.995,99.9996,99.9986,99.9973\nap-south,cell-1,99.9961,99.992,99.9988,99.9995,99.9707,99.9979,99.9992\nap-south,cell-2,99.9911,99.9883,99.9992,99.9998,99.9665,99.9935,99.9987\nap-south,cell-3,99.9962,99.991,99.9988,99.9983,99.9692,99.9971,99.9994"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "include",
+            "match": "all",
+            "filters": [
+              {
+                "fieldName": "region",
+                "config": {
+                  "id": "regex",
+                  "options": {
+                    "value": "$region"
+                  }
+                }
+              },
+              {
+                "fieldName": "cell",
+                "config": {
+                  "id": "regex",
+                  "options": {
+                    "value": "$cell"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
