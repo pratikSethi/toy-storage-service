@@ -109,6 +109,7 @@ Only `frontdoor/`, `ts2-core/`, `deploy/compose/` and `docs/` exist today.
 - [ADRs](docs/adr/0007-multi-word-service-names.md): why things are the way they are.
 - [Plan](docs/plan.md) and [backlog](docs/backlog.md): what is built and what comes next.
 - [Demo](docs/demo.md): curl walkthrough.
+- [API reference](docs/api/index.md): the OpenAPI spec, rendered in the docs site.
 
 ## License
 

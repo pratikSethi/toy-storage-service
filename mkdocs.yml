@@ -46,12 +46,16 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
+plugins:
+  - search
+  - swagger-ui-tag
 nav:
   - Home: index.md
   - Get started:
       - Development setup: setup.md
       - Demo: demo.md
       - Port registry: ports.md
+      - API reference: api/index.md
   - Design:
       - PRD: prd.md
       - System overview: design/000-system-overview.md

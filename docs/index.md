@@ -165,7 +165,7 @@ Start the service with `make run`. It listens on `127.0.0.1:9000` and keeps data
 
     Send some requests with curl or the CLI and watch the dashboard fill in.
 
-The [demo](demo.md) covers range reads, paging, errors and the 413 limit. Interactive API docs live at <http://127.0.0.1:9000/docs> while the service runs.
+The [demo](demo.md) covers range reads, paging, errors and the 413 limit. Interactive API docs live at <http://127.0.0.1:9000/docs> while the service runs. The same spec is rendered offline on the [API reference](api/index.md) page.
 
 ## Where it is today
 
