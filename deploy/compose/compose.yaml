@@ -9,10 +9,58 @@ services:
     volumes:
       - ts2-data:/data
       - ../../config/frontdoor.compose.yaml:/etc/ts2/frontdoor.yaml:ro
+    environment:
+      # Empty keeps the OTLP exporter off; `make up-obs` sets it.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${TS2_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: ts2-frontdoor
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/healthz"]
       interval: 10s
       timeout: 3s
       retries: 3
+
+  otel-collector:
+    profiles: [obs]
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    user: "0:0"
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel/collector.yaml:/etc/otelcol/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on: [victoriametrics, victorialogs]
+
+  victoriametrics:
+    profiles: [obs]
+    image: victoriametrics/victoria-metrics:v1.156.0
+    command: ["-storageDataPath=/storage", "-retentionPeriod=7d"]
+    volumes:
+      - vm-data:/storage
+
+  victorialogs:
+    profiles: [obs]
+    image: victoriametrics/victoria-logs:v1.54.0
+    command: ["-storageDataPath=/vlogs", "-retentionPeriod=7d"]
+    volumes:
+      - vl-data:/vlogs
+
+  grafana:
+    profiles: [obs]
+    image: grafana/grafana:13.3.1
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      # Local only: admin/admin plus anonymous viewer.
+      GF_INSTALL_PLUGINS: victoriametrics-logs-datasource
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on: [victoriametrics, victorialogs]
+
 volumes:
   ts2-data:
+  vm-data:
+  vl-data:
+  grafana-data:

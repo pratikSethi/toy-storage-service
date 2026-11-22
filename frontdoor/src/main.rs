@@ -18,10 +18,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         limits: config.limits,
     };
 
+    let otlp = ts2_frontdoor::metrics::init_otlp();
+
     let listener = tokio::net::TcpListener::bind(&config.listen).await?;
     tracing::info!(listen = %config.listen, "frontdoor started");
     axum::serve(listener, router(state))
         .with_graceful_shutdown(async { tokio::signal::ctrl_c().await.ok(); })
         .await?;
+    if let Some(provider) = otlp {
+        provider.shutdown().ok();
+    }
     Ok(())
 }

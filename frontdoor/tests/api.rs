@@ -220,3 +220,33 @@ fn write_openapi_yaml() {
     std::fs::create_dir_all(std::path::Path::new(path).parent().unwrap()).unwrap();
     std::fs::write(path, serde_yaml_ng::to_string(&ApiDoc::openapi()).unwrap()).unwrap();
 }
+
+#[tokio::test]
+async fn metrics_record_a_request() {
+    use opentelemetry::metrics::MeterProvider;
+    use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMeterProvider};
+    let exporter = InMemoryMetricExporter::default();
+    let provider = SdkMeterProvider::builder().with_reader(PeriodicReader::builder(exporter.clone()).build()).build();
+    let dir = tempfile::tempdir().unwrap();
+    let state = AppState {
+        index: Arc::new(SqliteObjectIndex::open(&dir.path().join("index.db")).unwrap()),
+        chunks: Arc::new(LocalChunkStore::open(dir.path()).unwrap()),
+        limits: limits(),
+    };
+    let app = ts2_frontdoor::router_with_meter(state, &provider.meter("test"));
+    let (status, ..) = get(&app, "/v1/buckets/nope").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    provider.force_flush().unwrap();
+
+    let finished = exporter.get_finished_metrics().unwrap();
+    let names: Vec<&str> = finished.iter().flat_map(|rm| rm.scope_metrics()).flat_map(|sm| sm.metrics()).map(|m| m.name()).collect();
+    for want in [
+        "ts2_http_requests_total",
+        "ts2_http_request_duration_seconds",
+        "ts2_http_request_bytes_total",
+        "ts2_http_response_bytes_total",
+        "ts2_http_inflight_requests",
+    ] {
+        assert!(names.contains(&want), "missing {want}: {names:?}");
+    }
+}

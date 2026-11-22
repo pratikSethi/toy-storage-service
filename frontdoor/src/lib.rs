@@ -1,5 +1,6 @@
 pub mod error;
 pub mod handlers;
+pub mod metrics;
 
 use axum::extract::{DefaultBodyLimit, Request};
 use axum::http::{HeaderName, HeaderValue, header};
@@ -13,7 +14,6 @@ use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::request_id::{MakeRequestId, PropagateRequestIdLayer, RequestId, SetRequestIdLayer};
 use tower_http::set_header::SetResponseHeaderLayer;
-use tower_http::trace::{DefaultOnResponse, TraceLayer};
 use ts2_core::{ChunkStore, Limits, ObjectIndex};
 use utoipa::OpenApi;
 use utoipa_scalar::{Scalar, Servable};
@@ -78,18 +78,16 @@ async fn request_scope(req: Request, next: Next) -> Response {
 }
 
 pub fn router(state: AppState) -> Router {
+    router_with_meter(state, &opentelemetry::global::meter("ts2-frontdoor"))
+}
+
+pub fn router_with_meter(state: AppState, meter: &opentelemetry::metrics::Meter) -> Router {
     use handlers::*;
+    let metrics = metrics::Metrics::new(meter);
     let server = HeaderValue::from_str(&format!("ts2-frontdoor/{}", env!("CARGO_PKG_VERSION"))).expect("valid header");
     let layers = ServiceBuilder::new()
         .layer(SetRequestIdLayer::new(REQUEST_ID, MakeId))
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(|req: &Request| {
-                    let id = req.headers().get(REQUEST_ID).and_then(|v| v.to_str().ok()).unwrap_or_default();
-                    tracing::info_span!("request", method = %req.method(), path = %req.uri().path(), request_id = %id)
-                })
-                .on_response(DefaultOnResponse::new().level(tracing::Level::INFO)),
-        )
+        .layer(middleware::from_fn(move |req, next| metrics::track(metrics.clone(), req, next)))
         .layer(PropagateRequestIdLayer::new(REQUEST_ID))
         .layer(SetResponseHeaderLayer::overriding(header::SERVER, server))
         .layer(middleware::from_fn(request_scope));

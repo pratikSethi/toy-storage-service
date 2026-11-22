@@ -1,0 +1,50 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+  # Docker's json-file logs of every container; the filter below keeps frontdoor only.
+  filelog:
+    include: [/var/lib/docker/containers/*/*-json.log]
+    operators:
+      - type: json_parser
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+      - type: move
+        from: attributes.log
+        to: body
+      - type: remove
+        field: attributes.time
+      - type: remove
+        field: attributes.stream
+
+processors:
+  filter/frontdoor:
+    error_mode: ignore
+    logs:
+      log_record:
+        - 'not IsMatch(body, "\"target\":\"ts2_frontdoor")'
+  resource/logs:
+    attributes:
+      - {key: service.name, value: ts2-frontdoor, action: upsert}
+  batch: {}
+
+exporters:
+  otlphttp/metrics:
+    metrics_endpoint: http://victoriametrics:8428/opentelemetry/v1/metrics
+    compression: gzip
+  otlphttp/logs:
+    logs_endpoint: http://victorialogs:9428/insert/opentelemetry/v1/logs
+    compression: gzip
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/metrics]
+    logs:
+      receivers: [filelog]
+      processors: [filter/frontdoor, resource/logs, batch]
+      exporters: [otlphttp/logs]
