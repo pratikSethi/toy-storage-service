@@ -13,6 +13,8 @@ services:
       # Remote mode: gRPC to the two services below. Unset both for the in-process backends.
       TS2_INDEX_ADDR: object-index:50052
       TS2_CHUNK_NODES: node-1=chunk-store:50051
+      # Frontdoor refuses to start unless TS2_GC_MIN_AGE_SECS is at least twice TS2_PUT_TIMEOUT_SECS.
+      TS2_PUT_TIMEOUT_SECS: ${TS2_PUT_TIMEOUT_SECS:-900}
       TS2_GC_MIN_AGE_SECS: ${TS2_GC_MIN_AGE_SECS:-3600}
       TS2_GC_INTERVAL_SECS: ${TS2_GC_INTERVAL_SECS:-600}
       # Empty keeps the OTLP exporter off; `make up-obs` sets it.

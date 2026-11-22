@@ -1,9 +1,11 @@
 use axum::Router;
 use axum::body::Body;
 use axum::http::{HeaderMap, Method, Request, StatusCode};
+use futures_util::StreamExt;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use std::sync::Arc;
+use std::time::Duration;
 use tower::ServiceExt;
 use ts2_core::{Limits, LocalChunkStore, SqliteObjectIndex};
 use ts2_frontdoor::{ApiDoc, AppState, router};
@@ -25,6 +27,7 @@ fn app(dir: &std::path::Path, limits: Limits) -> Router {
         index: Arc::new(SqliteObjectIndex::open(&dir.join("index.db")).unwrap()),
         chunks: Arc::new(LocalChunkStore::open(dir).unwrap()),
         limits,
+        put_timeout: Duration::from_secs(60),
     })
 }
 
@@ -406,6 +409,7 @@ async fn metrics_record_a_request() {
         index: Arc::new(SqliteObjectIndex::open(&dir.path().join("index.db")).unwrap()),
         chunks: Arc::new(LocalChunkStore::open(dir.path()).unwrap()),
         limits: limits(),
+        put_timeout: Duration::from_secs(60),
     };
     let app = ts2_frontdoor::router_with_meter(state, &provider.meter("test"));
     let (status, ..) = get(&app, "/v1/buckets/nope").await;
@@ -464,4 +468,28 @@ async fn metrics_record_a_request() {
     .map(|(k, v)| (k.to_owned(), v))
     .into();
     assert_eq!(ops, want);
+}
+
+#[tokio::test]
+async fn put_that_never_finishes_times_out_with_504() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = router(AppState {
+        index: Arc::new(SqliteObjectIndex::open(&dir.path().join("index.db")).unwrap()),
+        chunks: Arc::new(LocalChunkStore::open(dir.path()).unwrap()),
+        limits: limits(),
+        put_timeout: Duration::from_millis(200),
+    });
+    create_bucket(&app, "photos").await;
+    // A client that sends a few bytes and then stalls.
+    let stalled = futures_util::stream::once(async { Ok::<_, std::io::Error>(vec![1u8; 10]) })
+        .chain(futures_util::stream::pending());
+    let req = Request::builder()
+        .method(Method::PUT)
+        .uri("/v1/buckets/photos/objects/slow.bin")
+        .body(Body::from_stream(stalled))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::GATEWAY_TIMEOUT);
+    let (status, ..) = get(&app, "/v1/buckets/photos/objects/slow.bin").await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "nothing was committed");
 }

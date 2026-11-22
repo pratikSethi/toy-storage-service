@@ -23,3 +23,38 @@ pub fn spawn(index: Arc<RemoteObjectIndex>, chunks: Arc<RemoteChunkStore>, cfg: 
         }
     });
 }
+
+impl GcConfig {
+    /// A chunk can be written at the start of a PUT and committed at its end, so it must stay younger than
+    /// `min_age` for the whole PUT. Twice the timeout leaves room for the retries and the slow commit.
+    pub fn check_against_put_timeout(&self, put_timeout: Duration) -> Result<(), String> {
+        if self.min_age < put_timeout * 2 {
+            return Err(format!(
+                "TS2_GC_MIN_AGE_SECS ({}) must be at least twice TS2_PUT_TIMEOUT_SECS ({})",
+                self.min_age.as_secs(),
+                put_timeout.as_secs()
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg(min_age: u64) -> GcConfig {
+        GcConfig {
+            min_age: Duration::from_secs(min_age),
+            interval: Duration::from_secs(600),
+        }
+    }
+
+    #[test]
+    fn min_age_must_be_twice_the_put_timeout() {
+        let t = Duration::from_secs(900);
+        assert!(cfg(1799).check_against_put_timeout(t).is_err());
+        assert!(cfg(1800).check_against_put_timeout(t).is_ok());
+        assert!(cfg(3600).check_against_put_timeout(t).is_ok());
+    }
+}

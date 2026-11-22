@@ -251,7 +251,8 @@ pub async fn put_object(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("application/octet-stream");
     let stream = body.into_data_stream().map_err(std::io::Error::other);
-    let m = ts2_core::put_object(
+    // A cancelled put leaves its chunks behind; GC removes them because min_age is at least twice this timeout.
+    let put = ts2_core::put_object(
         stream,
         &bucket,
         &key,
@@ -259,8 +260,10 @@ pub async fn put_object(
         &s.limits,
         &*s.index,
         &*s.chunks,
-    )
-    .await?;
+    );
+    let m = tokio::time::timeout(s.put_timeout, put)
+        .await
+        .map_err(|_| Error::Timeout(format!("PUT did not finish within {:?}", s.put_timeout)))??;
     let mut res = (
         StatusCode::CREATED,
         Json(PutResult {

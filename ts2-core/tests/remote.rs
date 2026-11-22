@@ -579,6 +579,20 @@ async fn gc_deletes_only_old_unreferenced_chunks() {
 }
 
 #[tokio::test]
+async fn gc_adds_a_clock_skew_margin_to_min_age() {
+    let c = cluster(Deadlines::default()).await;
+    seed_orphan(&c, 1, 3600 + 30); // older than min_age, inside the margin
+    seed_orphan(&c, 2, 3600 + 120); // past both
+    let deleted = gc::sweep(&c.index, &c.chunks, Duration::from_secs(3600))
+        .await
+        .unwrap();
+    assert_eq!(deleted, 1);
+    let f = c.state.lock().unwrap();
+    assert!(f.chunks.contains_key(&id(1)));
+    assert!(!f.chunks.contains_key(&id(2)));
+}
+
+#[tokio::test]
 async fn gc_keeps_a_chunk_whose_manifest_commits_between_the_two_lists() {
     let c = cluster(Deadlines::default()).await;
     seed_orphan(&c, 1, 7200); // old enough to delete, if nothing references it

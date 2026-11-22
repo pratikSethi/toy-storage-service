@@ -6,12 +6,15 @@ use crate::Result;
 use crate::remote::{RemoteChunkStore, RemoteObjectIndex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+/// Added to `min_age`: a chunk's age is the node's clock against ours, and they can differ.
+pub const CLOCK_SKEW_MARGIN: Duration = Duration::from_secs(60);
+
 /// One sweep. Returns how many chunks it deleted.
 ///
 /// Order matters: list each node's chunks BEFORE listing the index refs. An upload that commits
 /// between the two lists then has its chunks in the first list and its refs in the second, so they
 /// are kept. The reverse order would delete them. The age rule covers uploads that have written
-/// chunks but not yet committed: a chunk younger than `min_age` is never deleted.
+/// chunks but not yet committed: a chunk younger than `min_age` plus `CLOCK_SKEW_MARGIN` is never deleted.
 pub async fn sweep(
     index: &RemoteObjectIndex,
     chunks: &RemoteChunkStore,
@@ -27,7 +30,7 @@ pub async fn sweep(
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);
-    let cutoff = now - min_age.as_secs() as i64;
+    let cutoff = now - (min_age + CLOCK_SKEW_MARGIN).as_secs() as i64;
 
     let mut deleted = 0;
     for (node, c) in listed {

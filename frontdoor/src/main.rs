@@ -3,7 +3,7 @@ use std::time::Duration;
 use ts2_core::remote::{Deadlines, RemoteChunkStore, RemoteObjectIndex};
 use ts2_core::{ChunkStore, LocalChunkStore, ObjectIndex, SqliteObjectIndex};
 use ts2_frontdoor::gc::{self, GcConfig};
-use ts2_frontdoor::{AppState, Config, router};
+use ts2_frontdoor::{AppState, Config, DEFAULT_PUT_TIMEOUT, router};
 
 /// `TS2_CHUNK_NODES=node-1=chunk-store:50051,node-2=...` as (id, address) pairs.
 fn parse_nodes(s: &str) -> Result<Vec<(String, String)>, String> {
@@ -46,6 +46,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
+    let put_timeout = env_secs("TS2_PUT_TIMEOUT_SECS", DEFAULT_PUT_TIMEOUT.as_secs())?;
+    if put_timeout.is_zero() {
+        return Err("TS2_PUT_TIMEOUT_SECS must be at least 1".into());
+    }
     let path = std::env::args()
         .nth(1)
         .ok_or("usage: ts2-frontdoor <config.yaml>")?;
@@ -70,6 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 min_age: env_secs("TS2_GC_MIN_AGE_SECS", 3600)?,
                 interval: env_secs("TS2_GC_INTERVAL_SECS", 600)?,
             };
+            cfg.check_against_put_timeout(put_timeout)?;
             tracing::info!(index = %addr, chunk_nodes = %nodes, min_age = ?cfg.min_age, "remote backends, orphan gc on");
             gc::spawn(index.clone(), chunks.clone(), cfg);
             (index, chunks)
@@ -84,6 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         index,
         chunks,
         limits: config.limits,
+        put_timeout,
     };
 
     let otlp = ts2_frontdoor::metrics::init_otlp();

@@ -12,6 +12,7 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tower::ServiceBuilder;
 use tower_http::request_id::{
     MakeRequestId, PropagateRequestIdLayer, RequestId, SetRequestIdLayer,
@@ -34,7 +35,12 @@ pub struct AppState {
     pub index: Arc<dyn ObjectIndex>,
     pub chunks: Arc<dyn ChunkStore>,
     pub limits: Limits,
+    /// Upper bound on one whole PUT (body read, chunk writes, manifest commit). Orphan GC relies on it.
+    pub put_timeout: Duration,
 }
+
+/// Default for `TS2_PUT_TIMEOUT_SECS`: a 5 GiB object at about 6 MiB/s.
+pub const DEFAULT_PUT_TIMEOUT: Duration = Duration::from_secs(900);
 
 #[derive(OpenApi)]
 #[openapi(
