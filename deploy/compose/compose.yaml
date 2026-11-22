@@ -35,6 +35,7 @@ services:
       context: ../..
       dockerfile: chunk-store/Dockerfile
     platform: linux/arm64
+    restart: unless-stopped
     volumes:
       - chunk-data:/data
     healthcheck:
@@ -49,6 +50,7 @@ services:
       context: ../..
       dockerfile: object-index/Dockerfile
     platform: linux/arm64
+    restart: unless-stopped
     volumes:
       - index-data:/data
     healthcheck:

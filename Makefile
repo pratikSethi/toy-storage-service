@@ -41,8 +41,10 @@ e2e-native:
 	@TS2_LISTEN=127.0.0.1:50151 TS2_DATA_DIR=$(CPP_DIR)/chunks chunk-store/build/debug/ts2-chunk-store > $(CPP_DIR)/chunk-store.log 2>&1 & echo $$! > $(CPP_DIR)/pids; \
 	TS2_LISTEN=127.0.0.1:50152 TS2_DATA_DIR=$(CPP_DIR)/index object-index/build/debug/ts2-object-index > $(CPP_DIR)/object-index.log 2>&1 & echo $$! >> $(CPP_DIR)/pids; \
 	trap 'kill $$(cat $(CPP_DIR)/pids)' EXIT; sleep 1; \
-	$(MAKE) e2e TS2_INDEX_ADDR=127.0.0.1:50152 TS2_CHUNK_NODES=node-1=127.0.0.1:50151
+	$(MAKE) e2e TS2_INDEX_ADDR=127.0.0.1:50152 TS2_CHUNK_NODES=node-1=127.0.0.1:50151 \
+	  TS2_RESTART_CHUNK_STORE='tests/e2e/restart_chunk_store_native.sh $(CPP_DIR)'
 
 # The smoke test against the compose stack from `make up` (FrontdoorService on 9001). Leaves the stack running.
 e2e-compose: cli
-	TS2_ENDPOINT=http://127.0.0.1:9001 uv run --project cli pytest tests/e2e -v
+	TS2_ENDPOINT=http://127.0.0.1:9001 TS2_RESTART_CHUNK_STORE='docker compose -f deploy/compose/compose.yaml restart chunk-store' \
+	  uv run --project cli pytest tests/e2e -v

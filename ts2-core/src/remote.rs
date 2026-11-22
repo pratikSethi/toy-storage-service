@@ -51,6 +51,23 @@ async fn with_deadline<T>(
         .map_err(|_| Error::Timeout(format!("no answer within {limit:?}")))
 }
 
+/// Runs `call`, and once more if the first try came back `Unavailable` (a stale connection after a restart,
+/// or a service that is just coming up). Only for calls that are safe to repeat; never PutManifest, which
+/// has no idempotency key.
+async fn retry_once_if_unavailable<T, F, Fut>(mut call: F) -> Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T>>,
+{
+    match call().await {
+        Err(Error::Unavailable(_)) => {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            call().await
+        }
+        r => r,
+    }
+}
+
 /// Which service answered, because `NOT_FOUND` means different things to each.
 enum Source {
     Index,
@@ -83,8 +100,15 @@ fn channel(addr: &str) -> Result<Channel> {
         format!("http://{addr}")
     };
     // Lazy: frontdoor starts even when a service is still booting; the first call connects.
+    // Keepalives notice a peer that restarted or vanished, so a dead connection is replaced instead of
+    // failing the next request.
     Ok(Endpoint::from_shared(url)
         .map_err(|e| Error::Internal(format!("bad address {addr:?}: {e}")))?
+        .connect_timeout(Duration::from_secs(3))
+        .tcp_keepalive(Some(Duration::from_secs(30)))
+        .http2_keep_alive_interval(Duration::from_secs(10))
+        .keep_alive_timeout(Duration::from_secs(5))
+        .keep_alive_while_idle(true)
         .connect_lazy())
 }
 
@@ -181,8 +205,8 @@ impl RemoteObjectIndex {
         })
     }
 
-    /// Runs `call` on a fresh clone of the client (clones share the connection) under the 5 s deadline.
-    async fn rpc<T, F, Fut>(&self, call: F) -> Result<T>
+    /// One attempt on a fresh clone of the client (clones share the connection) under the 5 s deadline.
+    async fn rpc_once<T, F, Fut>(&self, call: F) -> Result<T>
     where
         F: FnOnce(ObjectIndexServiceClient<Channel>) -> Fut,
         Fut: Future<Output = std::result::Result<tonic::Response<T>, Status>>,
@@ -192,18 +216,27 @@ impl RemoteObjectIndex {
             .map_err(|s| map_status(s, Source::Index, ""))
     }
 
+    /// `rpc_once`, repeated once on `Unavailable`. For reads and other calls that are safe to repeat.
+    async fn rpc<T, F, Fut>(&self, call: F) -> Result<T>
+    where
+        F: Fn(ObjectIndexServiceClient<Channel>) -> Fut,
+        Fut: Future<Output = std::result::Result<tonic::Response<T>, Status>>,
+    {
+        retry_once_if_unavailable(|| self.rpc_once(&call)).await
+    }
+
     /// Every chunk id some manifest points at, for orphan GC. Pages until the index says it is done.
     pub async fn list_chunk_refs(&self) -> Result<std::collections::HashSet<String>> {
         let (mut refs, mut token) = (std::collections::HashSet::new(), String::new());
         loop {
-            let t = token.clone();
+            let req = pb::ListChunkRefsRequest {
+                page_size: 0,
+                page_token: token.clone(),
+            };
             let page = self
-                .rpc(|mut c| async move {
-                    c.list_chunk_refs(pb::ListChunkRefsRequest {
-                        page_size: 0,
-                        page_token: t,
-                    })
-                    .await
+                .rpc(|mut c| {
+                    let req = req.clone();
+                    async move { c.list_chunk_refs(req).await }
                 })
                 .await?;
             refs.extend(page.refs.into_iter().map(|r| r.chunk_id));
@@ -220,9 +253,10 @@ impl ObjectIndex for RemoteObjectIndex {
     async fn create_bucket(&self, name: &str) -> Result<Bucket> {
         let name = name.to_owned();
         Ok(bucket_from_pb(
-            self.rpc(
-                |mut c| async move { c.create_bucket(pb::CreateBucketRequest { name }).await },
-            )
+            // Not repeated: if the first try committed, the second would answer BucketExists.
+            self.rpc_once(|mut c| async move {
+                c.create_bucket(pb::CreateBucketRequest { name }).await
+            })
             .await?,
         ))
     }
@@ -230,15 +264,20 @@ impl ObjectIndex for RemoteObjectIndex {
     async fn get_bucket(&self, name: &str) -> Result<Bucket> {
         let name = name.to_owned();
         Ok(bucket_from_pb(
-            self.rpc(|mut c| async move { c.get_bucket(pb::GetBucketRequest { name }).await })
-                .await?,
+            self.rpc(|mut c| {
+                let req = pb::GetBucketRequest { name: name.clone() };
+                async move { c.get_bucket(req).await }
+            })
+            .await?,
         ))
     }
 
     async fn delete_bucket(&self, name: &str) -> Result<()> {
         let name = name.to_owned();
-        self.rpc(|mut c| async move { c.delete_bucket(pb::DeleteBucketRequest { name }).await })
-            .await?;
+        self.rpc_once(
+            |mut c| async move { c.delete_bucket(pb::DeleteBucketRequest { name }).await },
+        )
+        .await?;
         Ok(())
     }
 
@@ -253,8 +292,9 @@ impl ObjectIndex for RemoteObjectIndex {
         let req = pb::PutManifestRequest {
             manifest: Some(manifest_to_pb(manifest)?),
         };
+        // Not repeated: there is no idempotency key, and a lost response may hide a commit.
         let r = self
-            .rpc(|mut c| async move { c.put_manifest(req).await })
+            .rpc_once(|mut c| async move { c.put_manifest(req).await })
             .await?;
         let stored = r
             .manifest
@@ -271,8 +311,11 @@ impl ObjectIndex for RemoteObjectIndex {
             key: key.to_owned(),
         };
         manifest_from_pb(
-            self.rpc(|mut c| async move { c.get_manifest(req).await })
-                .await?,
+            self.rpc(|mut c| {
+                let req = req.clone();
+                async move { c.get_manifest(req).await }
+            })
+            .await?,
         )
     }
 
@@ -282,7 +325,8 @@ impl ObjectIndex for RemoteObjectIndex {
             key: key.to_owned(),
         };
         manifest_from_pb(
-            self.rpc(|mut c| async move { c.delete_manifest(req).await })
+            // Not repeated: if the first try committed, the second would lose the removed chunk list.
+            self.rpc_once(|mut c| async move { c.delete_manifest(req).await })
                 .await?,
         )
     }
@@ -301,7 +345,10 @@ impl ObjectIndex for RemoteObjectIndex {
             max_keys: max_keys as u32,
         };
         let r = self
-            .rpc(|mut c| async move { c.list_objects(req).await })
+            .rpc(|mut c| {
+                let req = req.clone();
+                async move { c.list_objects(req).await }
+            })
             .await?;
         Ok(ListPage {
             objects: r
@@ -468,15 +515,18 @@ impl RemoteChunkStore {
     pub async fn list_chunks(&self, node: &str) -> Result<Vec<ListedChunk>> {
         let (mut all, mut token) = (Vec::new(), String::new());
         loop {
-            let mut c = self.client(node)?;
             let req = pb::ListChunksRequest {
                 page_size: 0,
                 page_token: std::mem::take(&mut token),
             };
-            let page = with_deadline(self.deadlines.other, c.list_chunks(req))
-                .await?
-                .map_err(|s| map_status(s, Source::Chunk, ""))?
-                .into_inner();
+            let page = retry_once_if_unavailable(|| async {
+                let mut c = self.client(node)?;
+                with_deadline(self.deadlines.other, c.list_chunks(req.clone()))
+                    .await?
+                    .map_err(|s| map_status(s, Source::Chunk, ""))
+            })
+            .await?
+            .into_inner();
             all.extend(page.chunks.into_iter().map(|i| ListedChunk {
                 chunk_id: i.chunk_id,
                 created_unix: i.created_unix,
@@ -517,7 +567,6 @@ impl ChunkStore for RemoteChunkStore {
 
     async fn put(&self, node: &str, chunk_id: &str, data: Bytes) -> Result<()> {
         check_id(chunk_id)?;
-        let mut client = self.client(node)?;
         // The node verifies length and sha256 against this header, so hash before sending.
         let header = pb::PutChunkHeader {
             chunk_id: chunk_id.to_owned(),
@@ -525,19 +574,25 @@ impl ChunkStore for RemoteChunkStore {
             expected_sha256: hex::encode(Sha256::digest(&data)),
             write_token: String::new(),
         };
-        let frames: Vec<_> = std::iter::once(pb::put_chunk_request::Payload::Header(header))
-            .chain(
-                data.chunks(FRAME_BYTES)
-                    .map(|f| pb::put_chunk_request::Payload::Data(f.to_vec())),
-            )
-            .map(|payload| pb::PutChunkRequest {
-                payload: Some(payload),
-            })
-            .collect();
-        let call = client.put_chunk(futures_util::stream::iter(frames));
-        let result = with_deadline(self.deadlines.put_chunk, call)
-            .await?
-            .map_err(|s| map_status(s, Source::Chunk, chunk_id));
+        // Repeating is safe: the same id with the same bytes is the same chunk.
+        let result = retry_once_if_unavailable(|| async {
+            let mut client = self.client(node)?;
+            let frames: Vec<_> =
+                std::iter::once(pb::put_chunk_request::Payload::Header(header.clone()))
+                    .chain(
+                        data.chunks(FRAME_BYTES)
+                            .map(|f| pb::put_chunk_request::Payload::Data(f.to_vec())),
+                    )
+                    .map(|payload| pb::PutChunkRequest {
+                        payload: Some(payload),
+                    })
+                    .collect();
+            let call = client.put_chunk(futures_util::stream::iter(frames));
+            with_deadline(self.deadlines.put_chunk, call)
+                .await?
+                .map_err(|s| map_status(s, Source::Chunk, chunk_id))
+        })
+        .await;
         if matches!(result, Err(Error::DiskFull)) {
             self.node(node)?.state.lock().unwrap().exhausted_until =
                 Some(Instant::now() + EXHAUSTED_BACKOFF);
@@ -547,35 +602,41 @@ impl ChunkStore for RemoteChunkStore {
 
     async fn get(&self, node: &str, chunk_id: &str, range: Option<Range<u64>>) -> Result<Bytes> {
         check_id(chunk_id)?;
-        let mut client = self.client(node)?;
         let (range_start, range_end) = range.map_or((0, 0), |r| (r.start, r.end));
         let req = pb::GetChunkRequest {
             chunk_id: chunk_id.to_owned(),
             range_start,
             range_end,
         };
-        let fetch = async {
-            let mut stream = client.get_chunk(req).await?.into_inner();
-            let mut buf = BytesMut::new();
-            while let Some(frame) = stream.message().await? {
-                buf.extend_from_slice(&frame.data);
-            }
-            Ok::<_, Status>(buf.freeze())
-        };
-        with_deadline(self.deadlines.get_chunk, fetch)
-            .await?
-            .map_err(|s| map_status(s, Source::Chunk, chunk_id))
+        retry_once_if_unavailable(|| async {
+            let mut client = self.client(node)?;
+            let fetch = async {
+                let mut stream = client.get_chunk(req.clone()).await?.into_inner();
+                let mut buf = BytesMut::new();
+                while let Some(frame) = stream.message().await? {
+                    buf.extend_from_slice(&frame.data);
+                }
+                Ok::<_, Status>(buf.freeze())
+            };
+            with_deadline(self.deadlines.get_chunk, fetch)
+                .await?
+                .map_err(|s| map_status(s, Source::Chunk, chunk_id))
+        })
+        .await
     }
 
     async fn delete(&self, node: &str, chunk_id: &str) -> Result<()> {
         check_id(chunk_id)?;
-        let mut client = self.client(node)?;
         let req = pb::DeleteChunkRequest {
             chunk_id: chunk_id.to_owned(),
         };
-        with_deadline(self.deadlines.other, client.delete_chunk(req))
-            .await?
-            .map_err(|s| map_status(s, Source::Chunk, chunk_id))?;
+        retry_once_if_unavailable(|| async {
+            let mut client = self.client(node)?;
+            with_deadline(self.deadlines.other, client.delete_chunk(req.clone()))
+                .await?
+                .map_err(|s| map_status(s, Source::Chunk, chunk_id))
+        })
+        .await?;
         Ok(())
     }
 }

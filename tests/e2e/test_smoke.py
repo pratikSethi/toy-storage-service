@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -83,6 +84,24 @@ def test_head():
     r = ts2("head", f"{URI}/big.bin")
     assert r.returncode == 0, r.stderr
     assert f"content-length: {10 * MIB}" in r.stdout
+
+
+def test_survives_chunk_store_restart(data, tmp_path):
+    """A chunk-store restart between two requests must not fail the second one (retry on a dead connection)."""
+    restart = os.environ.get("TS2_RESTART_CHUNK_STORE")
+    if not restart:
+        pytest.skip("set TS2_RESTART_CHUNK_STORE to a command that restarts chunk-store")
+    assert ts2("cp", data / "big.bin", f"{URI}/before.bin").returncode == 0
+    subprocess.run(restart, shell=True, check=True)
+    time.sleep(1)  # let the node listen again; without it a 503 would be legitimate
+    r = ts2("cp", data / "big.bin", f"{URI}/after.bin")
+    assert r.returncode == 0, r.stderr
+    for name in ("before.bin", "after.bin"):
+        out = tmp_path / name
+        assert ts2("cp", f"{URI}/{name}", out).returncode == 0
+        assert out.read_bytes() == (data / "big.bin").read_bytes()
+    assert ts2("rm", f"{URI}/before.bin").returncode == 0
+    assert ts2("rm", f"{URI}/after.bin").returncode == 0
 
 
 def test_error_prints_problem_title(tmp_path):

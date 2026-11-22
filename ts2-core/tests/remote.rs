@@ -27,6 +27,12 @@ struct Fake {
     /// PutChunk fails with UNAVAILABLE once this many puts have succeeded.
     puts_before_down: Option<usize>,
     puts: usize,
+    /// The next this many chunk or index RPCs fail with UNAVAILABLE, then it works again (a restart).
+    chunk_flaky: u32,
+    index_flaky: u32,
+    /// Calls that reached the index's PutManifest / GetManifest, failed ones included.
+    put_manifest_calls: u32,
+    get_manifest_calls: u32,
     /// What NodeInfo answers.
     node_id: String,
     node_unhealthy: bool,
@@ -41,6 +47,14 @@ struct Fake {
 
 type Shared = Arc<Mutex<Fake>>;
 type Hook = Box<dyn FnOnce(&mut Fake) + Send>;
+
+fn flaky(left: &mut u32) -> std::result::Result<(), Status> {
+    if *left == 0 {
+        return Ok(());
+    }
+    *left -= 1;
+    Err(Status::unavailable("connection reset"))
+}
 
 fn fail(code: &Option<(Code, String)>) -> std::result::Result<(), Status> {
     code.as_ref()
@@ -77,6 +91,7 @@ impl ChunkStoreService for ChunkSvc {
         let delay = {
             let mut f = self.0.lock().unwrap();
             fail(&f.chunk_fail)?;
+            flaky(&mut f.chunk_flaky)?;
             if f.puts_before_down.is_some_and(|n| f.puts >= n) {
                 return Err(Status::unavailable("node went away"));
             }
@@ -98,8 +113,9 @@ impl ChunkStoreService for ChunkSvc {
 
     async fn get_chunk(&self, req: Request<pb::GetChunkRequest>) -> Rpc<Self::GetChunkStream> {
         let r = req.into_inner();
-        let f = self.0.lock().unwrap();
+        let mut f = self.0.lock().unwrap();
         fail(&f.chunk_fail)?;
+        flaky(&mut f.chunk_flaky)?;
         let (data, _) = f
             .chunks
             .get(&r.chunk_id)
@@ -121,6 +137,7 @@ impl ChunkStoreService for ChunkSvc {
     ) -> Rpc<pb::DeleteChunkResponse> {
         let mut f = self.0.lock().unwrap();
         fail(&f.chunk_fail)?;
+        flaky(&mut f.chunk_flaky)?;
         f.chunks.remove(&req.into_inner().chunk_id);
         Ok(Response::new(pb::DeleteChunkResponse {}))
     }
@@ -207,7 +224,9 @@ impl ObjectIndexService for IndexSvc {
         req: Request<pb::PutManifestRequest>,
     ) -> Rpc<pb::PutManifestResponse> {
         let mut f = self.0.lock().unwrap();
+        f.put_manifest_calls += 1;
         fail(&f.index_fail)?;
+        flaky(&mut f.index_flaky)?;
         let mut m = req.into_inner().manifest.unwrap();
         let k = (m.bucket.clone(), m.key.clone());
         let previous = f.manifests.get(&k).cloned();
@@ -222,8 +241,10 @@ impl ObjectIndexService for IndexSvc {
         }))
     }
     async fn get_manifest(&self, req: Request<pb::GetManifestRequest>) -> Rpc<pb::Manifest> {
-        let f = self.0.lock().unwrap();
+        let mut f = self.0.lock().unwrap();
+        f.get_manifest_calls += 1;
         fail(&f.index_fail)?;
+        flaky(&mut f.index_flaky)?;
         let r = req.into_inner();
         f.manifests
             .get(&(r.bucket, r.key))
@@ -757,4 +778,59 @@ async fn put_object_writes_every_chunk_to_the_healthy_node() {
     assert!(m.chunks.iter().all(|r| r.node_id == "n2"));
     assert!(s1.lock().unwrap().chunks.is_empty());
     assert_eq!(s2.lock().unwrap().chunks.len(), 20);
+}
+
+#[tokio::test]
+async fn chunk_calls_retry_once_when_unavailable() {
+    let c = cluster(Deadlines::default()).await;
+    c.chunks
+        .put("n1", &id(1), Bytes::from_static(b"abc"))
+        .await
+        .unwrap();
+    c.state.lock().unwrap().chunk_flaky = 1; // the service restarted: the first call hits a dead connection
+    assert_eq!(
+        c.chunks.get("n1", &id(1), None).await.unwrap(),
+        "abc",
+        "get"
+    );
+    c.state.lock().unwrap().chunk_flaky = 1;
+    c.chunks
+        .put("n1", &id(2), Bytes::from_static(b"def"))
+        .await
+        .unwrap();
+    c.state.lock().unwrap().chunk_flaky = 1;
+    c.chunks.delete("n1", &id(2)).await.unwrap();
+    assert!(
+        !c.state.lock().unwrap().chunks.contains_key(&id(2)),
+        "put and delete"
+    );
+    c.state.lock().unwrap().chunk_flaky = 1;
+    assert_eq!(c.chunks.list_chunks("n1").await.unwrap().len(), 1, "list");
+}
+
+#[tokio::test]
+async fn chunk_calls_give_up_after_one_retry() {
+    let c = cluster(Deadlines::default()).await;
+    c.state.lock().unwrap().chunk_flaky = 2;
+    let err = c.chunks.get("n1", &id(1), None).await.unwrap_err();
+    assert!(matches!(err, Error::Unavailable(_)), "{err:?}");
+}
+
+#[tokio::test]
+async fn index_reads_retry_once_but_put_manifest_does_not() {
+    let c = cluster(Deadlines::default()).await;
+    let m = put(&c, "k", &[1u8; 5]).await.unwrap();
+    c.state.lock().unwrap().index_flaky = 1;
+    assert_eq!(c.index.get_manifest("b", "k").await.unwrap().etag, m.etag);
+    assert_eq!(c.state.lock().unwrap().get_manifest_calls, 2);
+
+    let before = c.state.lock().unwrap().put_manifest_calls;
+    c.state.lock().unwrap().index_flaky = 1;
+    let err = put(&c, "k2", &[1u8; 5]).await.unwrap_err();
+    assert!(matches!(err, Error::Unavailable(_)), "{err:?}");
+    assert_eq!(
+        c.state.lock().unwrap().put_manifest_calls,
+        before + 1,
+        "one attempt: PutManifest has no idempotency key"
+    );
 }
