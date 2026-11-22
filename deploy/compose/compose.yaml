@@ -10,11 +10,48 @@ services:
       - ts2-data:/data
       - ../../config/frontdoor.compose.yaml:/etc/ts2/frontdoor.yaml:ro
     environment:
+      # Remote mode: gRPC to the two services below. Unset both for the in-process backends.
+      TS2_INDEX_ADDR: object-index:50052
+      TS2_CHUNK_NODES: node-1=chunk-store:50051
+      TS2_GC_MIN_AGE_SECS: ${TS2_GC_MIN_AGE_SECS:-3600}
+      TS2_GC_INTERVAL_SECS: ${TS2_GC_INTERVAL_SECS:-600}
       # Empty keeps the OTLP exporter off; `make up-obs` sets it.
       OTEL_EXPORTER_OTLP_ENDPOINT: ${TS2_OTLP_ENDPOINT:-}
       OTEL_SERVICE_NAME: ts2-frontdoor
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      chunk-store: {condition: service_healthy}
+      object-index: {condition: service_healthy}
+
+  # The two gRPC services publish no host port; only frontdoor talks to them (review 002).
+  chunk-store:
+    build:
+      context: ../..
+      dockerfile: chunk-store/Dockerfile
+    platform: linux/arm64
+    volumes:
+      - chunk-data:/data
+    healthcheck:
+      # The image has no curl or grpc_health_probe; perl-base is there, and a TCP connect to the listener is enough.
+      test: ["CMD", "perl", "-MIO::Socket::INET", "-e", "IO::Socket::INET->new('127.0.0.1:50051') or exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  object-index:
+    build:
+      context: ../..
+      dockerfile: object-index/Dockerfile
+    platform: linux/arm64
+    volumes:
+      - index-data:/data
+    healthcheck:
+      # The image has no curl or grpc_health_probe; perl-base is there, and a TCP connect to the listener is enough.
+      test: ["CMD", "perl", "-MIO::Socket::INET", "-e", "IO::Socket::INET->new('127.0.0.1:50052') or exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -61,6 +98,8 @@ services:
 
 volumes:
   ts2-data:
+  chunk-data:
+  index-data:
   vm-data:
   vl-data:
   grafana-data:
