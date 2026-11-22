@@ -10,9 +10,13 @@ ENV VCPKG_FORCE_SYSTEM_BINARIES=1 VCPKG_ROOT=/opt/vcpkg
 RUN git clone https://github.com/microsoft/vcpkg ${VCPKG_ROOT} \
     && ${VCPKG_ROOT}/bootstrap-vcpkg.sh -disableMetrics
 WORKDIR /src
-# Dependencies first so source edits do not rebuild gRPC. One root vcpkg.json serves both services.
+# Dependencies first so source edits do not rebuild gRPC. One root vcpkg.json serves both services, and both
+# Dockerfiles have the same instructions up to here, so the second image reuses the first one's layer.
+# The cache mount keeps vcpkg's binary cache between builds, so changing vcpkg.json rebuilds only the ports
+# that changed instead of all of gRPC. It is not part of the image.
 COPY vcpkg.json vcpkg.json
-RUN ${VCPKG_ROOT}/vcpkg install --x-install-root=/src/vcpkg_installed
+RUN --mount=type=cache,target=/root/.cache/vcpkg \
+    ${VCPKG_ROOT}/vcpkg install --x-install-root=/src/vcpkg_installed
 COPY cmake cmake
 COPY proto proto
 COPY chunk-store chunk-store

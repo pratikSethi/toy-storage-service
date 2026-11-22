@@ -41,6 +41,15 @@ Homebrew cannot run inside a sandboxed agent chat, because its nested macOS sand
 
 C++ has no built-in package manager. gRPC is too large, and needs `protoc` code generation, to vendor into the repo the way DuckDB vendors its small dependencies. vcpkg is free and MIT licensed. Both C++ services share one root `vcpkg.json` with a pinned `builtin-baseline`, so every machine, CI and Docker build the same versions and share one binary cache. The CMake presets load vcpkg through `$VCPKG_ROOT` and point `VCPKG_MANIFEST_DIR` at the repo root. Use a full clone (not `--depth 1`): vcpkg needs the baseline commit locally. To bump versions, change the baseline in `vcpkg.json` (a cold rebuild follows).
 
+### vcpkg in the Docker images
+
+The two C++ Dockerfiles install vcpkg dependencies from the root `vcpkg.json` before copying any source, so a source edit does not rebuild gRPC. Two things keep a rebuild cheap:
+
+- Both Dockerfiles have identical instructions up to that step, so the second image reuses the first image's layer.
+- The install step runs with `--mount=type=cache,target=/root/.cache/vcpkg`, which keeps vcpkg's binary cache across builds. When `vcpkg.json` changes, only the changed ports rebuild.
+
+Chosen over a shared base image because it needs no extra image to build first and no ordering between the two `docker build` calls. A cold build (empty Docker cache) still compiles gRPC once, which takes tens of minutes. Build the images one after another (`make up` does), because two cold builds in parallel compile gRPC twice at the same time. `docker builder prune` clears the cache.
+
 Clone and bootstrap it. `-disableMetrics` turns off telemetry.
 
 ```sh
