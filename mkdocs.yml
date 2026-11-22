@@ -49,17 +49,25 @@ markdown_extensions:
 plugins:
   - search
   - swagger-ui-tag
+extra_css:
+  - stylesheets/heatmap.css
 nav:
   - Home: index.md
-  - Get started:
-      - Development setup: setup.md
-      - Demo: demo.md
-      - Port registry: ports.md
+  - Customer guide:
+      - What TS2 is: guide/overview.md
+      - Getting started: guide/getting-started.md
+      - Concepts: guide/concepts.md
+      - Capabilities: guide/capabilities.md
+      - Limits: guide/limits.md
+      - Service levels: guide/service-levels.md
   - API: api/index.md
   - CLI: cli/index.md
-  - Design:
-      - PRD: prd.md
+  - Engineering:
+      - Overview: engineering/index.md
+      - Components: engineering/components.md
+      - Operations: engineering/operations.md
       - System overview: design/000-system-overview.md
+      - PRD: prd.md
       - ADRs:
           - 0001 JSON REST over S3 wire compatibility: adr/0001-json-rest-over-s3-wire-compat.md
           - 0002 Rust FrontdoorService, Go BucketRegistryService, C++ data plane: adr/0002-rust-frontdoor-go-bucket-registry-cpp-data-plane.md
@@ -68,8 +76,12 @@ nav:
           - 0005 File-reload config: adr/0005-file-reload-config-before-config-service.md
           - 0006 Object bytes through FrontdoorService: adr/0006-object-bytes-through-frontdoor.md
           - 0007 Multi-word service names: adr/0007-multi-word-service-names.md
+      - Reviews:
+          - 001 Plan review: reviews/001-plan-review.md
+          - 002 Round 3 review: reviews/002-round3-review.md
+      - Development setup: setup.md
+      - Demo: demo.md
+      - Port registry: ports.md
   - Project:
       - Plan: plan.md
       - Backlog: backlog.md
-      - Reviews:
-          - 001 Plan review: reviews/001-plan-review.md
