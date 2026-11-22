@@ -103,7 +103,7 @@ Only `frontdoor/`, `ts2-core/`, `deploy/compose/` and `docs/` exist today.
 
 ## Docs
 
-- [docs/README.md](docs/README.md): index of everything below.
+- [docs/index.md](docs/index.md): the docs site home. Run `make docs` and open http://127.0.0.1:8000/ to browse everything below.
 - [PRD](docs/prd.md): requirements, limits, milestones.
 - [System overview](docs/design/000-system-overview.md): the full design, request paths and decisions.
 - [ADRs](docs/adr/0007-multi-word-service-names.md): why things are the way they are.
