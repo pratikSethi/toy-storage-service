@@ -71,7 +71,7 @@ Anything recorded per object in the manifest can change later without migrating 
 
 - OpenTelemetry SDK in every service.
 - OTel Collector forwards metrics to VictoriaMetrics and logs to VictoriaLogs. Grafana dashboards are provisioned from the repo. Traces come later (Tempo or VictoriaTraces).
-- Alarms as listed in the [system overview](design/000-system-overview.md#observability).
+- Alarms as listed in the [system overview](design/000-system-overview.md#9-observability).
 - Every request is traceable by `x-ts2-request-id` across frontdoor, index and chunkstore nodes.
 
 ## Out of scope

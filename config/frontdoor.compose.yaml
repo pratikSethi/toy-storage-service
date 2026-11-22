@@ -1,0 +1,9 @@
+# Same as frontdoor.yaml, with container paths and a container-wide bind (compose publishes on 127.0.0.1 only).
+listen: 0.0.0.0:9000
+data_dir: /data
+sqlite_path: /data/index.db
+limits:
+  max_object_bytes: 268435456
+  max_key_bytes: 1024
+  inline_threshold_bytes: 65536
+  chunk_bytes: 4194304

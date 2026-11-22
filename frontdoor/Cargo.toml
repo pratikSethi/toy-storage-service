@@ -1,0 +1,7 @@
+[package]
+name = "ts2-frontdoor"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+ts2-core = { path = "../ts2-core" }

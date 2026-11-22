@@ -1,0 +1,18 @@
+site_name: TS2
+docs_dir: docs
+theme:
+  name: material
+nav:
+  - Home: README.md
+  - Backlog: backlog.md
+  - Plan: plan.md
+  - PRD: prd.md
+  - Design:
+      - 000 System overview: design/000-system-overview.md
+  - ADRs:
+      - 0001 JSON REST over S3 wire compatibility: adr/0001-json-rest-over-s3-wire-compat.md
+      - 0002 Rust frontdoor, Go registry, C++ data plane: adr/0002-rust-frontdoor-go-registry-cpp-data-plane.md
+      - 0003 Random chunk ids: adr/0003-random-chunk-ids-not-content-addressed.md
+      - 0004 Cells for the data plane: adr/0004-cells-for-the-data-plane-thin-global-layer.md
+      - 0005 File-reload config: adr/0005-file-reload-config-before-config-service.md
+      - 0006 Object bytes through frontdoor: adr/0006-object-bytes-through-frontdoor.md
