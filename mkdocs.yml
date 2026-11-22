@@ -49,6 +49,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Get started:
+      - Development setup: setup.md
       - Demo: demo.md
   - Design:
       - PRD: prd.md
