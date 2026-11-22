@@ -13,7 +13,10 @@ fn backing_service_errors_map_to_their_own_statuses() {
         ),
         (Error::Timeout("5s".into()), StatusCode::GATEWAY_TIMEOUT),
         (Error::DiskFull, StatusCode::INSUFFICIENT_STORAGE),
-        (Error::ChunkNotFound("ab".into()), StatusCode::NOT_FOUND),
+        (
+            Error::ChunkNotFound("ab".into()),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        ),
         (
             Error::Corrupt("ab".into()),
             StatusCode::INTERNAL_SERVER_ERROR,

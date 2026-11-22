@@ -76,9 +76,6 @@ impl IntoResponse for ApiError {
                 "range-not-satisfiable",
                 "Range not satisfiable",
             ),
-            Error::ChunkNotFound(_) => {
-                (StatusCode::NOT_FOUND, "chunk-not-found", "Chunk not found")
-            }
             Error::Unavailable(_) => {
                 tracing::warn!(error = %self.0, "backing service unavailable");
                 (
@@ -100,7 +97,8 @@ impl IntoResponse for ApiError {
                 "insufficient-storage",
                 "Insufficient storage",
             ),
-            Error::Corrupt(_) | Error::Internal(_) => {
+            // A manifest points at a chunk its node does not have: lost data, so a 5xx that burns error budget.
+            Error::Corrupt(_) | Error::ChunkNotFound(_) | Error::Internal(_) => {
                 tracing::error!(error = %self.0, "internal error");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
