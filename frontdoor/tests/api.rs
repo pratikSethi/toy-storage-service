@@ -236,6 +236,10 @@ async fn metrics_record_a_request() {
     let app = ts2_frontdoor::router_with_meter(state, &provider.meter("test"));
     let (status, ..) = get(&app, "/v1/buckets/nope").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+    // Same route, different method: must be separate series.
+    assert_eq!(post_bucket(&app, "photos").await.0, StatusCode::CREATED);
+    assert_eq!(get(&app, "/v1/buckets").await.0, StatusCode::OK);
+    assert_eq!(get(&app, "/nope").await.0, StatusCode::NOT_FOUND);
     provider.force_flush().unwrap();
 
     let finished = exporter.get_finished_metrics().unwrap();
@@ -249,4 +253,18 @@ async fn metrics_record_a_request() {
     ] {
         assert!(names.contains(&want), "missing {want}: {names:?}");
     }
+
+    // One request each, labelled by operation.
+    use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
+    let mut ops = std::collections::BTreeMap::new();
+    for m in finished.iter().flat_map(|rm| rm.scope_metrics()).flat_map(|sm| sm.metrics()).filter(|m| m.name() == "ts2_http_requests_total") {
+        let AggregatedMetrics::U64(MetricData::Sum(sum)) = m.data() else { panic!("counter is not a u64 sum") };
+        for dp in sum.data_points() {
+            let op = dp.attributes().find(|kv| kv.key.as_str() == "operation").unwrap().value.to_string();
+            *ops.entry(op).or_insert(0) += dp.value();
+        }
+    }
+    let want: std::collections::BTreeMap<String, u64> =
+        [("CreateBucket", 1), ("GetBucket", 1), ("ListBuckets", 1), ("Unknown", 1)].map(|(k, v)| (k.to_owned(), v)).into();
+    assert_eq!(ops, want);
 }

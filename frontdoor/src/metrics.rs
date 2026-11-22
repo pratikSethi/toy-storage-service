@@ -43,6 +43,23 @@ fn status_class(code: u16) -> &'static str {
     }
 }
 
+/// API operation name for a (method, route template) pair, as in the AWS service metrics.
+fn operation(method: &str, route: &str) -> &'static str {
+    match (method, route) {
+        ("GET", "/healthz") => "HealthCheck",
+        ("GET", "/v1/buckets") => "ListBuckets",
+        ("POST", "/v1/buckets") => "CreateBucket",
+        ("GET", "/v1/buckets/{bucket}") => "GetBucket",
+        ("DELETE", "/v1/buckets/{bucket}") => "DeleteBucket",
+        ("GET", "/v1/buckets/{bucket}/objects") => "ListObjects",
+        ("GET", "/v1/buckets/{bucket}/objects/{*key}") => "GetObject",
+        ("PUT", "/v1/buckets/{bucket}/objects/{*key}") => "PutObject",
+        ("HEAD", "/v1/buckets/{bucket}/objects/{*key}") => "HeadObject",
+        ("DELETE", "/v1/buckets/{bucket}/objects/{*key}") => "DeleteObject",
+        _ => "Unknown",
+    }
+}
+
 /// Records RED metrics and emits one JSON log line per request.
 /// shortcut: duration is time to response headers and byte counts come from Content-Length (or an exact body size),
 /// so a streamed body without a length is not counted. Upgrade by wrapping the body when that matters.
@@ -50,6 +67,7 @@ pub async fn track(metrics: Arc<Metrics>, req: Request, next: Next) -> Response 
     let method = req.method().to_string();
     // The route template keeps label cardinality bounded; unmatched paths collapse into one label.
     let route = req.extensions().get::<MatchedPath>().map_or("unmatched", |p| p.as_str()).to_owned();
+    let operation = operation(&method, &route);
     let request_id = req
         .headers()
         .get(&REQUEST_ID)
@@ -70,22 +88,22 @@ pub async fn track(metrics: Arc<Metrics>, req: Request, next: Next) -> Response 
 
     let status = res.status().as_u16();
     let bytes_out = axum::body::HttpBody::size_hint(res.body()).exact().unwrap_or(0);
-    let route_labels = [KeyValue::new("method", method.clone()), KeyValue::new("route", route.clone())];
-    metrics.duration.record(elapsed.as_secs_f64(), &route_labels);
-    metrics.requests.add(
-        1,
-        &[
-            KeyValue::new("method", method.clone()),
-            KeyValue::new("route", route.clone()),
-            KeyValue::new("status_class", status_class(status)),
-        ],
-    );
-    metrics.bytes_in.add(bytes_in, &route_labels);
-    metrics.bytes_out.add(bytes_out, &route_labels);
+    let labels = [
+        KeyValue::new("method", method.clone()),
+        KeyValue::new("route", route.clone()),
+        KeyValue::new("operation", operation),
+    ];
+    metrics.duration.record(elapsed.as_secs_f64(), &labels);
+    let mut with_status = labels.to_vec();
+    with_status.push(KeyValue::new("status_class", status_class(status)));
+    metrics.requests.add(1, &with_status);
+    metrics.bytes_in.add(bytes_in, &labels);
+    metrics.bytes_out.add(bytes_out, &labels);
 
     tracing::info!(
         method = %method,
         route = %route,
+        operation,
         status,
         duration_ms = elapsed.as_secs_f64() * 1000.0,
         bytes = bytes_in + bytes_out,
