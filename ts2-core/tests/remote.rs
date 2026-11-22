@@ -367,11 +367,21 @@ async fn chunk_goes_out_in_1_mib_frames_with_a_header() {
 }
 
 #[tokio::test]
-async fn overwrite_deletes_the_old_chunks_eagerly() {
+async fn overwrite_keeps_the_old_chunks_until_gc() {
     let c = cluster(Deadlines::default()).await;
     let first = put(&c, "k", &[1u8; 40]).await.unwrap();
     let second = put(&c, "k", &[2u8; 20]).await.unwrap();
     assert_eq!(second.version, 2);
+    // A GET that started on the first version can still finish.
+    assert_eq!(read(&c, first.clone(), 0, 40).await, [1u8; 40]);
+    let deleted = gc::sweep(&c.index, &c.chunks, Duration::from_secs(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        deleted,
+        first.chunks.len(),
+        "GC removes exactly the old chunks"
+    );
     let f = c.state.lock().unwrap();
     assert!(
         first
@@ -385,6 +395,25 @@ async fn overwrite_deletes_the_old_chunks_eagerly() {
             .iter()
             .all(|r| f.chunks.contains_key(&r.chunk_id))
     );
+}
+
+#[tokio::test]
+async fn delete_keeps_the_chunks_until_gc() {
+    let c = cluster(Deadlines::default()).await;
+    let m = put(&c, "k", &[1u8; 40]).await.unwrap();
+    delete_object(&*c.index, &*c.chunks, "b", "k")
+        .await
+        .unwrap();
+    assert_eq!(
+        read(&c, m.clone(), 0, 40).await,
+        [1u8; 40],
+        "an open GET finishes"
+    );
+    let deleted = gc::sweep(&c.index, &c.chunks, Duration::from_secs(1))
+        .await
+        .unwrap();
+    assert_eq!(deleted, m.chunks.len());
+    assert!(c.state.lock().unwrap().chunks.is_empty());
 }
 
 #[tokio::test]

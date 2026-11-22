@@ -52,4 +52,9 @@ pub trait ChunkStore: Send + Sync {
     /// Whole chunk, or the byte range within it.
     async fn get(&self, node: &str, chunk_id: &str, range: Option<Range<u64>>) -> Result<Bytes>;
     async fn delete(&self, node: &str, chunk_id: &str) -> Result<()>;
+    /// Whether an overwrite or delete removes the old chunks at once. A store that has orphan GC says
+    /// `false`: a GET that is still streaming the old version must not lose chunks under it.
+    fn deletes_eagerly(&self) -> bool {
+        true
+    }
 }

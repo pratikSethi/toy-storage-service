@@ -393,6 +393,11 @@ impl ChunkStore for RemoteChunkStore {
         self.nodes.iter().map(|(id, _)| id.clone()).collect()
     }
 
+    /// Orphan GC removes old chunks after `min_age`, so a GET in flight keeps its chunks.
+    fn deletes_eagerly(&self) -> bool {
+        false
+    }
+
     async fn put(&self, node: &str, chunk_id: &str, data: Bytes) -> Result<()> {
         check_id(chunk_id)?;
         let mut client = self.client(node)?;

@@ -161,8 +161,8 @@ where
         Err(e) => return Err(e),
     };
     // An overwrite replaced the old manifest, so its chunks are garbage now. Best effort: orphan GC is the safety net.
-    // A GET that is still streaming the old version can fail when this lands.
-    if let Some(old) = previous {
+    // Only stores without GC delete here, because a GET that is still streaming the old version would fail.
+    if let (Some(old), true) = (previous, chunks.deletes_eagerly()) {
         for c in old.chunks {
             let _ = chunks.delete(&c.node_id, &c.chunk_id).await;
         }
@@ -209,15 +209,18 @@ pub fn object_stream(
 }
 
 /// Removes the manifest first, then its chunks, so a manifest never points at a missing chunk.
-/// Chunk deletes are best effort; a failure leaves orphans for a future GC.
+/// Chunk deletes are best effort; a failure leaves orphans for GC. A store with GC skips them (see `deletes_eagerly`).
 pub async fn delete_object(
     index: &dyn ObjectIndex,
     chunks: &dyn ChunkStore,
     bucket: &str,
     key: &str,
 ) -> Result<()> {
-    for c in index.delete_manifest(bucket, key).await?.chunks {
-        let _ = chunks.delete(&c.node_id, &c.chunk_id).await;
+    let removed = index.delete_manifest(bucket, key).await?;
+    if chunks.deletes_eagerly() {
+        for c in removed.chunks {
+            let _ = chunks.delete(&c.node_id, &c.chunk_id).await;
+        }
     }
     Ok(())
 }
