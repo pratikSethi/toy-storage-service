@@ -16,11 +16,20 @@ pub struct Problem {
     #[serde(rename = "type")]
     #[schema(rename = "type", example = "https://ts2.dev/problems/object-not-found")]
     pub kind: String,
+    /// Short, human-readable summary of the problem type.
+    #[schema(example = "Object not found")]
     pub title: String,
+    /// HTTP status code, repeated from the response.
+    #[schema(example = 404)]
     pub status: u16,
+    /// Explanation specific to this occurrence. Internal errors give no detail.
+    #[schema(example = "object not found")]
     pub detail: String,
     /// The request path.
+    #[schema(example = "/v1/buckets/photos/objects/missing.txt")]
     pub instance: String,
+    /// Value of the `x-ts2-request-id` response header, for correlating with logs.
+    #[schema(example = "2f1c6b0e-8a52-4e1b-9d7c-0a3c5b1f7e44")]
     pub request_id: String,
 }
 
@@ -35,22 +44,52 @@ impl From<Error> for ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, slug, title) = match &self.0 {
-            Error::InvalidBucketName => (StatusCode::BAD_REQUEST, "invalid-bucket-name", "Invalid bucket name"),
+            Error::InvalidBucketName => (
+                StatusCode::BAD_REQUEST,
+                "invalid-bucket-name",
+                "Invalid bucket name",
+            ),
             Error::InvalidKey(_) => (StatusCode::BAD_REQUEST, "invalid-key", "Invalid key"),
-            Error::BucketNotFound => (StatusCode::NOT_FOUND, "bucket-not-found", "Bucket not found"),
-            Error::ObjectNotFound => (StatusCode::NOT_FOUND, "object-not-found", "Object not found"),
-            Error::BucketExists => (StatusCode::CONFLICT, "bucket-exists", "Bucket already exists"),
+            Error::BucketNotFound => (
+                StatusCode::NOT_FOUND,
+                "bucket-not-found",
+                "Bucket not found",
+            ),
+            Error::ObjectNotFound => (
+                StatusCode::NOT_FOUND,
+                "object-not-found",
+                "Object not found",
+            ),
+            Error::BucketExists => (
+                StatusCode::CONFLICT,
+                "bucket-exists",
+                "Bucket already exists",
+            ),
             Error::BucketNotEmpty => (StatusCode::CONFLICT, "bucket-not-empty", "Bucket not empty"),
-            Error::ObjectTooLarge { .. } => (StatusCode::PAYLOAD_TOO_LARGE, "object-too-large", "Object too large"),
-            Error::RangeNotSatisfiable { .. } => {
-                (StatusCode::RANGE_NOT_SATISFIABLE, "range-not-satisfiable", "Range not satisfiable")
-            }
+            Error::ObjectTooLarge { .. } => (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "object-too-large",
+                "Object too large",
+            ),
+            Error::RangeNotSatisfiable { .. } => (
+                StatusCode::RANGE_NOT_SATISFIABLE,
+                "range-not-satisfiable",
+                "Range not satisfiable",
+            ),
             Error::Corrupt(_) | Error::Internal(_) => {
                 tracing::error!(error = %self.0, "internal error");
-                (StatusCode::INTERNAL_SERVER_ERROR, "internal", "Internal error")
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal",
+                    "Internal error",
+                )
             }
         };
-        let detail = if status == StatusCode::INTERNAL_SERVER_ERROR { "internal error".into() } else { self.0.to_string() };
+        let detail = if status == StatusCode::INTERNAL_SERVER_ERROR {
+            "internal error".into()
+        } else {
+            self.0.to_string()
+        };
         let (request_id, instance) = REQUEST.try_with(Clone::clone).unwrap_or_default();
         let problem = Problem {
             kind: format!("https://ts2.dev/problems/{slug}"),
@@ -61,9 +100,15 @@ impl IntoResponse for ApiError {
             request_id,
         };
         let mut res = (status, serde_json::to_string(&problem).unwrap_or_default()).into_response();
-        res.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/problem+json"));
+        res.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/problem+json"),
+        );
         if let Error::RangeNotSatisfiable { size } = self.0 {
-            res.headers_mut().insert(header::CONTENT_RANGE, format!("bytes */{size}").parse().unwrap());
+            res.headers_mut().insert(
+                header::CONTENT_RANGE,
+                format!("bytes */{size}").parse().unwrap(),
+            );
         }
         res
     }

@@ -1,7 +1,10 @@
 openapi: 3.1.0
 info:
   title: TS2 frontdoor
-  description: JSON REST object store. Errors are RFC 9457 problem details.
+  description: |-
+    TS2 is a small S3-like object store. This is its JSON REST API: buckets hold objects, and objects are addressed by key, which may contain slashes.
+
+    The API is version 1 and lives under `/v1`. Every response carries an `x-ts2-request-id` header. Errors are RFC 9457 problem details (`application/problem+json`) with a `type` URL and a `request_id` field that matches that header.
   license:
     name: ''
   version: 0.1.0
@@ -9,11 +12,18 @@ paths:
   /healthz:
     get:
       tags:
-      - handlers
+      - Health
+      summary: Check that the service is up
+      description: |-
+        Returns the plain text `ok` as soon as the server can answer. It does not touch the object index or the chunk store.
+
+        ```sh
+        curl http://127.0.0.1:9000/healthz
+        ```
       operationId: healthz
       responses:
         '200':
-          description: Alive
+          description: Service is alive. Body is the text `ok`.
           content:
             text/plain:
               schema:
@@ -21,20 +31,35 @@ paths:
   /v1/buckets:
     get:
       tags:
-      - handlers
+      - Buckets
+      summary: List buckets
+      description: |-
+        Returns every bucket. The list is not paged.
+
+        ```sh
+        curl http://127.0.0.1:9000/v1/buckets
+        ```
       operationId: list_buckets
       responses:
         '200':
-          description: ''
+          description: All buckets.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BucketList'
     post:
       tags:
-      - handlers
+      - Buckets
+      summary: Create a bucket
+      description: |-
+        Creates an empty bucket. Names are 3 to 63 characters of lowercase letters, digits and hyphens. A body that is not valid JSON is reported as an invalid bucket name.
+
+        ```sh
+        curl -X POST http://127.0.0.1:9000/v1/buckets -H 'content-type: application/json' -d '{"name":"photos"}'
+        ```
       operationId: create_bucket
       requestBody:
+        description: Name of the bucket to create.
         content:
           application/json:
             schema:
@@ -42,19 +67,19 @@ paths:
         required: true
       responses:
         '201':
-          description: ''
+          description: Bucket created.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BucketInfo'
         '400':
-          description: invalid-bucket-name
+          description: 'Problem type `invalid-bucket-name`: the name breaks the naming rules or the body is not valid JSON.'
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '409':
-          description: bucket-exists
+          description: 'Problem type `bucket-exists`: a bucket with this name already exists.'
           content:
             application/problem+json:
               schema:
@@ -62,50 +87,66 @@ paths:
   /v1/buckets/{bucket}:
     get:
       tags:
-      - handlers
+      - Buckets
+      summary: Get a bucket
+      description: |-
+        Returns the bucket name and creation time.
+
+        ```sh
+        curl http://127.0.0.1:9000/v1/buckets/photos
+        ```
       operationId: get_bucket
       parameters:
       - name: bucket
         in: path
-        description: Bucket name
+        description: 'Bucket name, 3 to 63 characters: lowercase letters, digits, hyphens.'
         required: true
         schema:
           type: string
+        example: photos
       responses:
         '200':
-          description: ''
+          description: The bucket.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BucketInfo'
         '404':
-          description: bucket-not-found
+          description: 'Problem type `bucket-not-found`: no bucket with this name.'
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
     delete:
       tags:
-      - handlers
+      - Buckets
+      summary: Delete a bucket
+      description: |-
+        Deletes an empty bucket. A bucket that still holds objects is refused with 409, so delete its objects first.
+
+        ```sh
+        curl -X DELETE http://127.0.0.1:9000/v1/buckets/photos
+        ```
       operationId: delete_bucket
       parameters:
       - name: bucket
         in: path
-        description: Bucket name
+        description: 'Bucket name, 3 to 63 characters: lowercase letters, digits, hyphens.'
         required: true
         schema:
           type: string
+        example: photos
       responses:
         '204':
-          description: Deleted
+          description: Bucket deleted. No body.
         '404':
-          description: bucket-not-found
+          description: 'Problem type `bucket-not-found`: no bucket with this name.'
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '409':
-          description: bucket-not-empty
+          description: 'Problem type `bucket-not-empty`: the bucket still contains objects.'
           content:
             application/problem+json:
               schema:
@@ -113,26 +154,35 @@ paths:
   /v1/buckets/{bucket}/objects:
     get:
       tags:
-      - handlers
+      - Objects
+      summary: List objects
+      description: |-
+        Lists keys in lexicographic (bytewise) order. `prefix` narrows the keys, `start_after` resumes after a given key, and `max_keys` sets the page size (default and maximum 1000). When `is_truncated` is true, pass `next_start_after` as `start_after` to get the next page.
+
+        ```sh
+        curl 'http://127.0.0.1:9000/v1/buckets/photos/objects?prefix=docs/&max_keys=100'
+        ```
       operationId: list_objects
       parameters:
       - name: bucket
         in: path
-        description: Bucket name
+        description: 'Bucket name, 3 to 63 characters: lowercase letters, digits, hyphens.'
         required: true
         schema:
           type: string
+        example: photos
       - name: prefix
         in: path
-        description: Only keys starting with this prefix.
+        description: 'Only keys starting with this prefix. Default: no prefix.'
         required: true
         schema:
           type:
           - string
           - 'null'
+        example: docs/
       - name: start_after
         in: path
-        description: Only keys after this one, in bytewise order.
+        description: Only keys after this one in bytewise order. Use `next_start_after` from the previous page.
         required: true
         schema:
           type:
@@ -140,22 +190,23 @@ paths:
           - 'null'
       - name: max_keys
         in: path
-        description: Page size, default and maximum 1000.
+        description: Page size. Default and maximum 1000. Larger values are capped at 1000, 0 is raised to 1.
         required: true
         schema:
           type:
           - integer
           - 'null'
           minimum: 0
+        example: 100
       responses:
         '200':
-          description: ''
+          description: One page of objects.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ObjectList'
         '404':
-          description: bucket-not-found
+          description: 'Problem type `bucket-not-found`: no bucket with this name.'
           content:
             application/problem+json:
               schema:
@@ -163,60 +214,94 @@ paths:
   /v1/buckets/{bucket}/objects/{key}:
     get:
       tags:
-      - handlers
+      - Objects
+      summary: Download an object
+      description: |-
+        Streams the object bytes with its stored `Content-Type`, `ETag` and `Content-Length`. Send one `Range` header to read part of the object: `bytes=a-b`, `bytes=a-` or `bytes=-n` (last n bytes). A satisfiable range returns 206 with `Content-Range`. Several ranges in one header are not supported and return 416.
+
+        ```sh
+        curl -H 'Range: bytes=0-99' http://127.0.0.1:9000/v1/buckets/photos/objects/docs/hello.txt
+        ```
       operationId: get_object
       parameters:
       - name: bucket
         in: path
-        description: Bucket name
+        description: 'Bucket name, 3 to 63 characters: lowercase letters, digits, hyphens.'
         required: true
         schema:
           type: string
+        example: photos
       - name: key
         in: path
-        description: Object key, may contain slashes
+        description: Object key. May contain slashes, for example `docs/a/b.txt`. At most max_key_bytes bytes (default 1024).
         required: true
         schema:
           type: string
+        example: docs/hello.txt
+      - name: Range
+        in: header
+        description: 'A single byte range: `bytes=a-b`, `bytes=a-` or `bytes=-n`.'
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
+        example: bytes=0-99
       responses:
         '200':
-          description: Object bytes
+          description: 'Full object bytes, with Content-Type, ETag, Content-Length and Accept-Ranges: bytes.'
           content:
             application/octet-stream:
               schema:
                 type: string
         '206':
-          description: 'Requested byte range. Supported forms: bytes=a-b, bytes=a-, bytes=-n'
+          description: The requested byte range, with a Content-Range header.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
         '404':
-          description: bucket-not-found or object-not-found
+          description: Problem type `bucket-not-found` or `object-not-found`.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '416':
-          description: range-not-satisfiable (multi-range is not supported)
+          description: 'Problem type `range-not-satisfiable`: the range starts past the end of the object or lists several ranges. Content-Range is `bytes */size`.'
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
     put:
       tags:
-      - handlers
+      - Objects
+      summary: Upload an object
+      description: |-
+        Streams the request body into the bucket under the given key. Objects under the inline threshold (64 KiB by default) are stored inside the manifest. Larger ones are split into fixed-size chunks. The `Content-Type` header is stored and returned on read, and defaults to `application/octet-stream`.
+
+        Writing to an existing key replaces the manifest and increases `version` by one. Bodies above `max_object_bytes` (256 MiB by default) are refused with 413, using `Content-Length` when present and the byte count while streaming otherwise.
+
+        ```sh
+        curl -X PUT http://127.0.0.1:9000/v1/buckets/photos/objects/docs/hello.txt -H 'content-type: text/plain' -d 'hello world'
+        ```
       operationId: put_object
       parameters:
       - name: bucket
         in: path
-        description: Bucket name
+        description: 'Bucket name, 3 to 63 characters: lowercase letters, digits, hyphens.'
         required: true
         schema:
           type: string
+        example: photos
       - name: key
         in: path
-        description: Object key, may contain slashes
+        description: Object key. May contain slashes, for example `docs/a/b.txt`. At most max_key_bytes bytes (default 1024).
         required: true
         schema:
           type: string
+        example: docs/hello.txt
       requestBody:
+        description: Raw object bytes. Any content type is accepted and stored with the object.
         content:
           application/octet-stream:
             schema:
@@ -224,7 +309,7 @@ paths:
         required: true
       responses:
         '201':
-          description: ''
+          description: Object stored. The ETag header is the quoted hex sha256.
           headers:
             ETag:
               schema:
@@ -235,75 +320,89 @@ paths:
               schema:
                 $ref: '#/components/schemas/PutResult'
         '400':
-          description: invalid-key
+          description: 'Problem type `invalid-key`: the key is empty, too long or has disallowed characters.'
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '404':
-          description: bucket-not-found
+          description: 'Problem type `bucket-not-found`: no bucket with this name.'
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '413':
-          description: object-too-large
+          description: 'Problem type `object-too-large`: the body is larger than max_object_bytes.'
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
     delete:
       tags:
-      - handlers
+      - Objects
+      summary: Delete an object
+      description: |-
+        Removes the object's manifest and releases its chunks. Deleting a key that does not exist returns 404.
+
+        ```sh
+        curl -X DELETE http://127.0.0.1:9000/v1/buckets/photos/objects/docs/hello.txt
+        ```
       operationId: delete_object
       parameters:
       - name: bucket
         in: path
-        description: Bucket name
+        description: 'Bucket name, 3 to 63 characters: lowercase letters, digits, hyphens.'
         required: true
         schema:
           type: string
+        example: photos
       - name: key
         in: path
-        description: Object key, may contain slashes
+        description: Object key. May contain slashes, for example `docs/a/b.txt`. At most max_key_bytes bytes (default 1024).
         required: true
         schema:
           type: string
+        example: docs/hello.txt
       responses:
         '204':
-          description: Deleted
+          description: Object deleted. No body.
         '404':
-          description: bucket-not-found or object-not-found
+          description: Problem type `bucket-not-found` or `object-not-found`.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
     head:
       tags:
-      - handlers
+      - Objects
+      summary: Get object metadata
+      description: |-
+        Returns the headers a GET would return (`Content-Type`, `ETag`, `Content-Length`, `Accept-Ranges`) with no body. A HEAD response has no problem body, so errors show only the status code.
+
+        ```sh
+        curl -I http://127.0.0.1:9000/v1/buckets/photos/objects/docs/hello.txt
+        ```
       operationId: head_object
       parameters:
       - name: bucket
         in: path
-        description: Bucket name
+        description: 'Bucket name, 3 to 63 characters: lowercase letters, digits, hyphens.'
         required: true
         schema:
           type: string
+        example: photos
       - name: key
         in: path
-        description: Object key, may contain slashes
+        description: Object key. May contain slashes, for example `docs/a/b.txt`. At most max_key_bytes bytes (default 1024).
         required: true
         schema:
           type: string
+        example: docs/hello.txt
       responses:
         '200':
-          description: Object headers only
+          description: Object headers only. No body.
         '404':
-          description: bucket-not-found or object-not-found
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
+          description: Problem type `bucket-not-found` or `object-not-found`. HEAD responses carry no body.
 components:
   schemas:
     BucketInfo:
@@ -315,8 +414,12 @@ components:
         created_at:
           type: string
           format: date-time
+          description: When the bucket was created (UTC).
+          example: 2026-11-22T10:15:00Z
         name:
           type: string
+          description: Bucket name.
+          example: photos
     BucketList:
       type: object
       required:
@@ -326,6 +429,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BucketInfo'
+          description: All buckets.
     CreateBucket:
       type: object
       required:
@@ -333,7 +437,7 @@ components:
       properties:
         name:
           type: string
-          description: '3 to 63 characters: lowercase letters, digits, hyphens.'
+          description: 'Bucket name: 3 to 63 characters, lowercase letters, digits and hyphens.'
           example: photos
     ObjectInfo:
       type: object
@@ -345,14 +449,22 @@ components:
       properties:
         etag:
           type: string
+          description: Hex sha256 of the object bytes, without quotes.
+          example: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
         key:
           type: string
+          description: Object key.
+          example: docs/hello.txt
         last_modified:
           type: string
           format: date-time
+          description: When the object was last written (UTC).
+          example: 2026-11-22T10:20:00Z
         size:
           type: integer
           format: int64
+          description: Object size in bytes.
+          example: 48213
           minimum: 0
     ObjectList:
       type: object
@@ -362,15 +474,18 @@ components:
       properties:
         is_truncated:
           type: boolean
+          description: True when more keys match than fit in this page.
         next_start_after:
           type:
           - string
           - 'null'
-          description: Pass as `start_after` to get the next page.
+          description: Pass as `start_after` to get the next page. Null on the last page.
+          example: docs/hello.txt
         objects:
           type: array
           items:
             $ref: '#/components/schemas/ObjectInfo'
+          description: One page of objects in lexicographic (bytewise) key order.
     Problem:
       type: object
       description: RFC 9457 problem details.
@@ -384,17 +499,26 @@ components:
       properties:
         detail:
           type: string
+          description: Explanation specific to this occurrence. Internal errors give no detail.
+          example: object not found
         instance:
           type: string
           description: The request path.
+          example: /v1/buckets/photos/objects/missing.txt
         request_id:
           type: string
+          description: Value of the `x-ts2-request-id` response header, for correlating with logs.
+          example: 2f1c6b0e-8a52-4e1b-9d7c-0a3c5b1f7e44
         status:
           type: integer
           format: int32
+          description: HTTP status code, repeated from the response.
+          example: 404
           minimum: 0
         title:
           type: string
+          description: Short, human-readable summary of the problem type.
+          example: Object not found
         type:
           type: string
           description: URI reference identifying the problem type.
@@ -410,15 +534,32 @@ components:
       properties:
         bucket:
           type: string
+          description: Bucket the object was written to.
+          example: photos
         etag:
           type: string
+          description: Hex sha256 of the object bytes, without quotes. The ETag header carries it quoted.
+          example: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
         key:
           type: string
+          description: Object key.
+          example: docs/hello.txt
         size:
           type: integer
           format: int64
+          description: Object size in bytes.
+          example: 48213
           minimum: 0
         version:
           type: integer
           format: int64
+          description: Starts at 1 and increases by one on each overwrite of the same key.
+          example: 1
           minimum: 0
+tags:
+- name: Buckets
+  description: Create, inspect, list and delete buckets.
+- name: Objects
+  description: Upload, download, inspect, list and delete objects.
+- name: Health
+  description: Liveness check.
