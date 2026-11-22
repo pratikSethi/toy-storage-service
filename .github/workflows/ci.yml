@@ -2,7 +2,12 @@ name: ci
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 # The demo target is Linux arm64, but CI runs on whatever ubuntu-latest offers (x64 today).
 # Add an ubuntu-24.04-arm runner to the cpp matrix when arm64 specific issues matter.
@@ -16,6 +21,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # ts2-proto gets protoc from protoc-bin-vendored, so no system protoc is needed.
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
@@ -34,30 +40,42 @@ jobs:
 
   cpp:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [chunk-store, object-index]
     env:
-      VCPKG_ROOT: /usr/local/share/vcpkg
+      VCPKG_ROOT: ${{ github.workspace }}/.vcpkg
       VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/.vcpkg-cache,readwrite
     steps:
       - uses: actions/checkout@v4
-      - name: Cache vcpkg binaries
-        uses: actions/cache@v4
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
         with:
           path: .vcpkg-cache
-          key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/vcpkg.json', matrix.service)) }}
-          restore-keys: vcpkg-${{ runner.os }}-${{ runner.arch }}-
-      - run: mkdir -p .vcpkg-cache
-      - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
-      - name: Configure
-        working-directory: ${{ matrix.service }}
-        run: cmake --preset debug
-      - name: Build
-        working-directory: ${{ matrix.service }}
-        run: cmake --build --preset debug
-      - name: Test
-        working-directory: ${{ matrix.service }}
-        run: ctest --preset debug
+          # One key for both services: they share the root vcpkg.json (and its pinned baseline).
+          key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('vcpkg.json') }}
+      - name: Install vcpkg at the pinned baseline
+        run: |
+          mkdir -p .vcpkg-cache
+          baseline=$(jq -r '."builtin-baseline"' vcpkg.json)
+          git clone https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" checkout "$baseline"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+          sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Build and test chunk-store
+        working-directory: chunk-store
+        run: |
+          cmake --preset debug
+          cmake --build --preset debug
+          ctest --preset debug
+      - name: Build and test object-index
+        working-directory: object-index
+        run: |
+          cmake --preset debug
+          cmake --build --preset debug
+          ctest --preset debug
+      # Save even when a step above failed, so a red or timed-out first run still warms the cache.
+      - name: Save vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('vcpkg.json') }}

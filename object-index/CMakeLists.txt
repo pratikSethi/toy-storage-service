@@ -12,21 +12,8 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(Catch2 3 CONFIG REQUIRED)
 find_package(SQLite3 REQUIRED)
 
-# Generated C++ for the shared contract in ../proto.
-set(PROTO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../proto)
-set(GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/gen)
-file(MAKE_DIRECTORY ${GEN_DIR})
-add_library(ts2_proto STATIC)
-protobuf_generate(TARGET ts2_proto LANGUAGE cpp
-  IMPORT_DIRS ${PROTO_ROOT} PROTOC_OUT_DIR ${GEN_DIR}
-  PROTOS ${PROTO_ROOT}/ts2/v1/object_index.proto)
-protobuf_generate(TARGET ts2_proto LANGUAGE grpc
-  GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
-  PLUGIN "protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
-  IMPORT_DIRS ${PROTO_ROOT} PROTOC_OUT_DIR ${GEN_DIR}
-  PROTOS ${PROTO_ROOT}/ts2/v1/object_index.proto)
-target_include_directories(ts2_proto PUBLIC ${GEN_DIR})
-target_link_libraries(ts2_proto PUBLIC protobuf::libprotobuf gRPC::grpc++)
+# Generated C++ and gRPC code for the shared contract in ../proto.
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ts2_proto.cmake)
 
 add_library(object_index_lib STATIC src/service.cpp)
 target_include_directories(object_index_lib PUBLIC src)

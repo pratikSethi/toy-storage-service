@@ -1,5 +1,5 @@
 [workspace]
-members = ["ts2-core", "frontdoor"]
+members = ["ts2-core", "frontdoor", "ts2-proto"]
 resolver = "2"
 
 [workspace.package]

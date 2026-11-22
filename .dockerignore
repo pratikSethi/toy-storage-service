@@ -3,3 +3,5 @@ site/
 .venv/
 .git/
 data/
+**/build/
+**/vcpkg_installed/

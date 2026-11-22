@@ -2,20 +2,23 @@
 #   docker build -f object-index/Dockerfile -t ts2-object-index .
 FROM ubuntu:24.04 AS build
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cmake ninja-build git curl zip unzip tar pkg-config ca-certificates \
+    build-essential cmake ninja-build git curl zip unzip tar pkg-config ca-certificates perl python3 \
     && apt-get clean
-# vcpkg has no prebuilt tools for arm64 Linux, so use the system ones.
+# vcpkg has no prebuilt tools for arm64 Linux, so use the system ones. Full clone: the manifest
+# builtin-baseline commit must exist locally.
 ENV VCPKG_FORCE_SYSTEM_BINARIES=1 VCPKG_ROOT=/opt/vcpkg
-RUN git clone --depth 1 https://github.com/microsoft/vcpkg ${VCPKG_ROOT} \
+RUN git clone https://github.com/microsoft/vcpkg ${VCPKG_ROOT} \
     && ${VCPKG_ROOT}/bootstrap-vcpkg.sh -disableMetrics
 WORKDIR /src
-# Dependencies first so source edits do not rebuild gRPC.
-COPY object-index/vcpkg.json object-index/vcpkg.json
-RUN cd object-index && ${VCPKG_ROOT}/vcpkg install
+# Dependencies first so source edits do not rebuild gRPC. One root vcpkg.json serves both services.
+COPY vcpkg.json vcpkg.json
+RUN ${VCPKG_ROOT}/vcpkg install --x-install-root=/src/vcpkg_installed
+COPY cmake cmake
 COPY proto proto
 COPY object-index object-index
 RUN cmake -S object-index -B /out -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
+      -DVCPKG_MANIFEST_MODE=OFF -DVCPKG_INSTALLED_DIR=/src/vcpkg_installed \
     && cmake --build /out --target ts2-object-index
 
 FROM ubuntu:24.04

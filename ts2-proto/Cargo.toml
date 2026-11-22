@@ -1,0 +1,16 @@
+[package]
+name = "ts2-proto"
+version.workspace = true
+edition.workspace = true
+description = "Generated tonic/prost code for the ts2.v1 gRPC contracts in proto/"
+publish = false
+
+[dependencies]
+prost = "0.14.6"
+prost-types = "0.14.6"
+tonic = "0.14.9"
+tonic-prost = "0.14.9"
+
+[build-dependencies]
+protoc-bin-vendored = "3.3.0"
+tonic-prost-build = "0.14.9"

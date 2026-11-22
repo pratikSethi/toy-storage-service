@@ -1,5 +1,6 @@
 {
-  "name": "ts2-chunk-store",
+  "name": "ts2",
   "version": "0.0.1",
-  "dependencies": ["grpc", "protobuf", "spdlog", "catch2"]
+  "builtin-baseline": "93ad765c7b66ab9ce97469ec23a90b15c3a14ee5",
+  "dependencies": ["grpc", "protobuf", "spdlog", "catch2", "sqlite3"]
 }
