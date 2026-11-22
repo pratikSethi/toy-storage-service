@@ -103,6 +103,7 @@ Only `frontdoor/`, `ts2-core/`, `deploy/compose/` and `docs/` exist today.
 
 ## Docs
 
+- [CLI reference](docs/cli/index.md): every `ts2` command, with a try-it session.
 - [docs/index.md](docs/index.md): the docs site home. Run `make docs` and open http://127.0.0.1:8000/ to browse everything below.
 - [PRD](docs/prd.md): requirements, limits, milestones.
 - [System overview](docs/design/000-system-overview.md): the full design, request paths and decisions.

@@ -11,8 +11,17 @@ hide:
 
 TS2 is an S3-like object store that runs on a laptop, with a plain JSON REST API. It is built one component per commit, to learn how object storage works on the inside.
 
-[Try it](demo.md){ .md-button .md-button--primary }
-[System overview](design/000-system-overview.md){ .md-button }
+<div class="grid cards" markdown>
+
+-   :material-api: **[API reference](api/index.md)**
+
+    Every endpoint clients can call, with request and response shapes.
+
+-   :material-console: **[CLI reference](cli/index.md)**
+
+    Every `ts2` command and option, plus a session you can run locally.
+
+</div>
 
 ---
 
@@ -68,71 +77,22 @@ flowchart LR
 
 Until the C++ services exist, `ts2-core` runs a SQLite file as the index and a local directory as the chunk store, inside the FrontdoorService process. They implement the same traits the real services will.
 
-## Components
+## Try it
 
-<div class="grid cards" markdown>
+Start the service with `make run`. It listens on `127.0.0.1:9000` and keeps data in `./data`. Then, in another terminal:
 
--   :material-door-open: **FrontdoorService**
+=== "ts2 CLI"
 
-    ---
+    ```sh
+    uv tool install --editable ./cli
+    head -c 10485760 /dev/urandom > big.bin
+    ts2 mb demo
+    ts2 cp big.bin ts2://demo/big.bin
+    ts2 ls demo
+    ts2 cp ts2://demo/big.bin copy.bin
+    ```
 
-    Rust. The only thing clients talk to. Checks limits, chunks uploads, serves the REST API and OpenAPI docs.
-
-    **Status:** built (v0.1). [Design](design/000-system-overview.md#4-components-and-languages)
-
--   :material-cube-outline: **ts2-core**
-
-    ---
-
-    Rust library. Manifest model, chunking, hashing, placement, and the ObjectIndex and ChunkStore traits with SQLite and local-disk implementations.
-
-    **Status:** built (v0.1). [Design](design/000-system-overview.md#4-components-and-languages)
-
--   :material-format-list-bulleted: **ObjectIndexService**
-
-    ---
-
-    C++. Stores manifests by (bucket, key) and answers listings. It never sees object bytes.
-
-    **Status:** planned, proto scaffold in progress (v0.2). [Design](design/000-system-overview.md#4-components-and-languages)
-
--   :material-harddisk: **ChunkStoreService**
-
-    ---
-
-    C++. Stores chunks, one process per data directory. `put`, `get(range)`, `delete`, `list`.
-
-    **Status:** planned, proto scaffold in progress (v0.2). [Design](design/000-system-overview.md#4-components-and-languages)
-
--   :material-folder-key-outline: **BucketRegistry**
-
-    ---
-
-    Rust module now, Go service from v0.4. Knows which buckets exist, who owns them, their quotas and which cell holds them.
-
-    **Status:** built as a module (v0.1), Go service planned (v0.4). [Design](design/000-system-overview.md#4-components-and-languages)
-
--   :material-console: **ts2 CLI**
-
-    ---
-
-    Python. `mb`, `cp`, `ls`, `head`, `rm` and `rb` against the REST API, plus the end-to-end smoke test.
-
-    **Status:** built. [Demo](demo.md#with-the-cli)
-
--   :material-chart-line: **Observability**
-
-    ---
-
-    OpenTelemetry Collector, VictoriaMetrics, VictoriaLogs and a Grafana dashboard, behind the compose `obs` profile.
-
-    **Status:** built for FrontdoorService. [Design](design/000-system-overview.md#9-observability)
-
-</div>
-
-## Quickstart
-
-Start the service with `make run`. It listens on `127.0.0.1:9000` and keeps data in `./data`.
+    All commands and options are in the [CLI reference](cli/index.md).
 
 === "curl"
 
@@ -145,16 +105,6 @@ Start the service with `make run`. It listens on `127.0.0.1:9000` and keeps data
     curl -s "$B/demo/objects?prefix=docs/"
     ```
 
-=== "ts2 CLI"
-
-    ```sh
-    uv tool install --editable ./cli
-    ts2 mb demo
-    ts2 cp ./big.bin ts2://demo/big.bin
-    ts2 ls demo
-    ts2 cp ts2://demo/big.bin ./copy.bin
-    ```
-
 === "Grafana"
 
     ```sh
@@ -165,7 +115,7 @@ Start the service with `make run`. It listens on `127.0.0.1:9000` and keeps data
 
     Send some requests with curl or the CLI and watch the dashboard fill in.
 
-The [demo](demo.md) covers range reads, paging, errors and the 413 limit. Interactive API docs live at <http://127.0.0.1:9000/docs> while the service runs. The same spec is rendered offline on the [API reference](api/index.md) page.
+The [demo](demo.md) covers range reads, paging, errors and the 413 limit. A running service also serves interactive API docs at <http://127.0.0.1:9000/docs>.
 
 ## Where it is today
 
@@ -183,26 +133,4 @@ The commit-by-commit detail is in the [plan](plan.md).
 
 ## Read next
 
-<div class="grid cards" markdown>
-
--   :material-file-document-outline: **[PRD](prd.md)**
-
-    Requirements, limits and milestones.
-
--   :material-sitemap-outline: **[System overview](design/000-system-overview.md)**
-
-    Layers, cells, request paths and the data model.
-
--   :material-scale-balance: **[ADRs](adr/0001-json-rest-over-s3-wire-compat.md)**
-
-    Why things are the way they are.
-
--   :material-timeline-check-outline: **[Plan](plan.md)**
-
-    What is built and what comes next.
-
--   :material-playlist-check: **[Backlog](backlog.md)**
-
-    Features by milestone, plus unscheduled.
-
-</div>
+[PRD](prd.md), [system overview](design/000-system-overview.md) (components and languages, request paths, data model), [ADRs](adr/0001-json-rest-over-s3-wire-compat.md) and the [plan](plan.md).

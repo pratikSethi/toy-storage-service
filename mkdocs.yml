@@ -55,7 +55,8 @@ nav:
       - Development setup: setup.md
       - Demo: demo.md
       - Port registry: ports.md
-      - API reference: api/index.md
+  - API: api/index.md
+  - CLI: cli/index.md
   - Design:
       - PRD: prd.md
       - System overview: design/000-system-overview.md

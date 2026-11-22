@@ -65,15 +65,19 @@ def request(ctx: typer.Context, method: str, path: str, **kw: Any) -> httpx.Resp
 
 
 @app.command()
-def mb(ctx: typer.Context, bucket: str) -> None:
+def mb(
+    ctx: typer.Context, bucket: Annotated[str, typer.Argument(help="Name of the bucket to create.")]
+) -> None:
     """Make a bucket."""
     request(ctx, "POST", "/v1/buckets", json={"name": bucket})
     typer.echo(f"made bucket {bucket}")
 
 
 @app.command()
-def rb(ctx: typer.Context, bucket: str) -> None:
-    """Remove an empty bucket."""
+def rb(
+    ctx: typer.Context, bucket: Annotated[str, typer.Argument(help="Name of the bucket to remove.")]
+) -> None:
+    """Remove an empty bucket. Fails if the bucket still holds objects."""
     request(ctx, "DELETE", f"/v1/buckets/{quote(bucket)}")
     typer.echo(f"removed bucket {bucket}")
 
@@ -81,10 +85,12 @@ def rb(ctx: typer.Context, bucket: str) -> None:
 @app.command()
 def ls(
     ctx: typer.Context,
-    bucket: Annotated[str | None, typer.Argument()] = None,
-    prefix: str = "",
+    bucket: Annotated[
+        str | None, typer.Argument(help="Bucket to list. Omit to list all buckets.")
+    ] = None,
+    prefix: Annotated[str, typer.Option(help="Only list keys that start with this prefix.")] = "",
 ) -> None:
-    """List buckets, or the objects in a bucket."""
+    """List buckets, or the objects in a bucket. Pages through large listings."""
     if bucket is None:
         for b in request(ctx, "GET", "/v1/buckets").json()["buckets"]:
             typer.echo(f"{b['created_at']}  {b['name']}")
@@ -115,8 +121,15 @@ def stream(ctx: typer.Context, method: str, path: str) -> Iterator[httpx.Respons
 
 
 @app.command()
-def cp(ctx: typer.Context, src: str, dst: str) -> None:
-    """Copy a local file to ts2://bucket/key, or the reverse."""
+def cp(
+    ctx: typer.Context,
+    src: Annotated[str, typer.Argument(help="Local file path, or ts2://bucket/key to download.")],
+    dst: Annotated[str, typer.Argument(help="ts2://bucket/key to upload to, or local file path.")],
+) -> None:
+    """Copy a file to or from ts2://bucket/key. Exactly one side is a ts2:// uri.
+
+    Uploads print the ETag. Both directions stream, so large files are fine.
+    """
     up, down = dst.startswith(SCHEME), src.startswith(SCHEME)
     if up == down:
         raise fail("exactly one of src and dst must be a ts2:// uri")
@@ -138,15 +151,21 @@ def cp(ctx: typer.Context, src: str, dst: str) -> None:
 
 
 @app.command()
-def rm(ctx: typer.Context, uri: str) -> None:
+def rm(
+    ctx: typer.Context,
+    uri: Annotated[str, typer.Argument(help="Object to delete, ts2://bucket/key.")],
+) -> None:
     """Delete an object."""
     request(ctx, "DELETE", obj_path(uri))
     typer.echo(f"deleted {uri}")
 
 
 @app.command()
-def head(ctx: typer.Context, uri: str) -> None:
-    """Show an object's headers."""
+def head(
+    ctx: typer.Context,
+    uri: Annotated[str, typer.Argument(help="Object to inspect, ts2://bucket/key.")],
+) -> None:
+    """Show an object's size, content type and ETag."""
     resp = request(ctx, "HEAD", obj_path(uri))
     for name in ("content-length", "content-type", "etag", "last-modified"):
         if name in resp.headers:
