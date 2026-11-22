@@ -15,6 +15,8 @@ Every port TS2 uses, in one place. **Rule: a new port goes in this table in the 
 | 9428 | VictoriaLogs (image default, not set in the repo) | `make up-obs` | container only | `deploy/compose/otel/collector.yaml` |
 | 50051 | ChunkStoreService gRPC | built binary, or its container | host `127.0.0.1` when run directly, container only in Docker | `chunk-store/src/main.cpp`, `chunk-store/Dockerfile` |
 | 50052 | ObjectIndexService gRPC | built binary, or its container | host `127.0.0.1` when run directly, container only in Docker | `object-index/src/main.cpp`, `object-index/Dockerfile` |
+| 50151 | ChunkStoreService for `make e2e-native`, temp data dir | `make e2e-native` | host, `127.0.0.1`, while the test runs | `Makefile` |
+| 50152 | ObjectIndexService for `make e2e-native`, temp data dir | `make e2e-native` | host, `127.0.0.1`, while the test runs | `Makefile` |
 | 50061-50069 | Reserved for more ChunkStoreService nodes (node 1 to 9) | not used yet | n/a | this page |
 
 Compose publishes only FrontdoorService (9001) and Grafana (3000) to the host. The collector, VictoriaMetrics and VictoriaLogs talk to each other on the compose network.

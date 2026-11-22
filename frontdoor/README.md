@@ -2,7 +2,7 @@
 
 Rust (axum, tonic, tower, utoipa 5.x). The binary is `ts2-frontdoor`. It is the only part of TS2 that clients talk to.
 
-When you upload an object, FrontdoorService checks the limits, cuts the bytes into chunks, writes them to chunk storage, and then writes the object's manifest (its size, ETag and ordered list of chunks) to the index. When you read, it looks up the manifest and streams the chunks back. In v0.1 the index is a SQLite file and chunk storage is a local directory, both provided by the [`ts2-core`](../ts2-core/README.md) library inside the same process.
+When you upload an object, FrontdoorService checks the limits, cuts the bytes into chunks, writes them to chunk storage, and then writes the object's manifest (its size, ETag and ordered list of chunks) to the index. When you read, it looks up the manifest and streams the chunks back. By default the index is a SQLite file and chunk storage is a local directory, both provided by the [`ts2-core`](../ts2-core/README.md) library inside the same process. Set `TS2_INDEX_ADDR` and `TS2_CHUNK_NODES` and it talks gRPC to ObjectIndexService and ChunkStoreService instead (see below).
 
 ## What it owns
 
@@ -22,6 +22,17 @@ make run                         # listens on 127.0.0.1:9000, data in ./data
 ```
 
 Config is `config/frontdoor.yaml` (limits, listen address, data paths). Try the API with the [demo](../docs/demo.md).
+
+## Remote mode
+
+| Variable | Meaning |
+|---|---|
+| `TS2_INDEX_ADDR` | ObjectIndexService address, e.g. `127.0.0.1:50052`. |
+| `TS2_CHUNK_NODES` | Comma-separated `node-id=address`, e.g. `node-1=127.0.0.1:50051`. The id is stored in manifests, so do not rename it. |
+| `TS2_GC_MIN_AGE_SECS` | Orphan GC never deletes chunks younger than this. Default 3600. Keep it well above the longest upload. |
+| `TS2_GC_INTERVAL_SECS` | Time between GC sweeps. Default 600. |
+
+Set both addresses or neither. Remote mode connects lazily, so frontdoor starts before the services are up; requests fail with 503 until they are. Upstream failures map to 503 (unavailable), 504 (deadline), 507 (node out of space) and 404 (`chunk-not-found`), not 500. In remote mode a background task deletes chunks that no manifest references (see `ts2-core/src/gc.rs`). `make e2e-native` runs the smoke test this way against the locally built C++ binaries.
 
 ## Design
 
