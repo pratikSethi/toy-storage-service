@@ -40,18 +40,26 @@ e2e: cli
 	TS2_ENDPOINT=http://127.0.0.1:9099 uv run --project cli pytest tests/e2e -v
 
 # Same smoke test with the frontdoor in remote mode against natively built C++ services (cmake debug builds
-# in chunk-store/ and object-index/) on throwaway ports 50151 and 50152 and temp data dirs.
+# in chunk-store/ and object-index/): four chunk nodes on ports 50151 and 50153-50155, the index on 50152,
+# all with temp data dirs. pids file: line 1 node-1, line 2 the index, lines 3-5 nodes 2-4.
 CPP_DIR := $(CURDIR)/target/e2e-cpp
+CHUNK_PORTS := 50151 50153 50154 50155
 e2e-native:
 	@test -x chunk-store/build/debug/ts2-chunk-store -a -x object-index/build/debug/ts2-object-index || { echo "build the C++ services first (see chunk-store/README.md)"; exit 1; }
 	rm -rf $(CPP_DIR) && mkdir -p $(CPP_DIR)
-	@TS2_LISTEN=127.0.0.1:50151 TS2_DATA_DIR=$(CPP_DIR)/chunks chunk-store/build/debug/ts2-chunk-store > $(CPP_DIR)/chunk-store.log 2>&1 & echo $$! > $(CPP_DIR)/pids; \
+	@TS2_LISTEN=127.0.0.1:50151 TS2_NODE_ID=node-1 TS2_DATA_DIR=$(CPP_DIR)/chunks-1 chunk-store/build/debug/ts2-chunk-store > $(CPP_DIR)/chunk-store-1.log 2>&1 & echo $$! > $(CPP_DIR)/pids; \
 	TS2_LISTEN=127.0.0.1:50152 TS2_DATA_DIR=$(CPP_DIR)/index object-index/build/debug/ts2-object-index > $(CPP_DIR)/object-index.log 2>&1 & echo $$! >> $(CPP_DIR)/pids; \
+	for n in 2 3 4; do \
+	  TS2_LISTEN=127.0.0.1:$$((50150 + n + (n > 1))) TS2_NODE_ID=node-$$n TS2_DATA_DIR=$(CPP_DIR)/chunks-$$n chunk-store/build/debug/ts2-chunk-store > $(CPP_DIR)/chunk-store-$$n.log 2>&1 & echo $$! >> $(CPP_DIR)/pids; \
+	done; \
 	trap 'kill $$(cat $(CPP_DIR)/pids)' EXIT; sleep 1; \
-	$(MAKE) e2e TS2_INDEX_ADDR=127.0.0.1:50152 TS2_CHUNK_NODES=node-1=127.0.0.1:50151 \
-	  TS2_RESTART_CHUNK_STORE='tests/e2e/restart_chunk_store_native.sh $(CPP_DIR)'
+	$(MAKE) e2e TS2_INDEX_ADDR=127.0.0.1:50152 \
+	  TS2_CHUNK_NODES=node-1=127.0.0.1:50151,node-2=127.0.0.1:50153,node-3=127.0.0.1:50154,node-4=127.0.0.1:50155 \
+	  TS2_RESTART_CHUNK_STORE='tests/e2e/restart_chunk_store_native.sh $(CPP_DIR)' \
+	  TS2_COUNT_CHUNKS='tests/e2e/count_chunks.sh $(CPP_DIR)'
 
 # The smoke test against the compose stack from `make up` (FrontdoorService on 9001). Leaves the stack running.
 e2e-compose: cli
 	TS2_ENDPOINT=http://127.0.0.1:9001 TS2_RESTART_CHUNK_STORE='docker compose -f deploy/compose/compose.yaml restart chunk-store-1' \
+	  TS2_COUNT_CHUNKS='tests/e2e/count_chunks.sh compose' \
 	  uv run --project cli pytest tests/e2e -v

@@ -17,6 +17,7 @@ Every port TS2 uses, in one place. **Rule: a new port goes in this table in the 
 | 50052 | ObjectIndexService gRPC | built binary, or its container | host `127.0.0.1` when run directly, container only in Docker | `object-index/src/main.cpp`, `object-index/Dockerfile` |
 | 50151 | ChunkStoreService for `make e2e-native`, temp data dir | `make e2e-native` | host, `127.0.0.1`, while the test runs | `Makefile` |
 | 50152 | ObjectIndexService for `make e2e-native`, temp data dir | `make e2e-native` | host, `127.0.0.1`, while the test runs | `Makefile` |
+| 50153-50155 | ChunkStoreService nodes 2 to 4 for `make e2e-native` (node 1 is on 50151), temp data dirs | `make e2e-native` | host, `127.0.0.1`, while the test runs | `Makefile` |
 | 50061 | ChunkStoreService `node-1` in compose (`chunk-store-1`) | `make up` | container only | `deploy/compose/compose.yaml` |
 | 50062 | ChunkStoreService `node-2` in compose (`chunk-store-2`) | `make up` | container only | `deploy/compose/compose.yaml` |
 | 50063 | ChunkStoreService `node-3` in compose (`chunk-store-3`) | `make up` | container only | `deploy/compose/compose.yaml` |

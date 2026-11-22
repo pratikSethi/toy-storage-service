@@ -104,6 +104,32 @@ def test_survives_chunk_store_restart(data, tmp_path):
     assert ts2("rm", f"{URI}/after.bin").returncode == 0
 
 
+def test_big_object_spreads_over_nodes(data, tmp_path):
+    """40 MiB is 10 chunks; rendezvous placement must put them on more than one node, and GET must reassemble them."""
+    count = os.environ.get("TS2_COUNT_CHUNKS")
+    if not count:
+        pytest.skip("set TS2_COUNT_CHUNKS to a command that prints a node's chunk count (arg: node number)")
+
+    def per_node() -> list[int]:
+        return [
+            int(subprocess.run(f"{count} {n}", shell=True, check=True, capture_output=True, text=True).stdout)
+            for n in range(1, 5)
+        ]
+
+    before = per_node()
+    big = tmp_path / "forty.bin"
+    big.write_bytes(os.urandom(40 * MIB))
+    assert ts2("cp", big, f"{URI}/forty.bin").returncode == 0
+    gained = [a - b for a, b in zip(per_node(), before)]
+    assert sum(gained) == 10, gained
+    # All 10 on one node has chance 4 * 4**-10, about 4e-6.
+    assert sum(g > 0 for g in gained) > 1, gained
+    out = tmp_path / "forty.out"
+    assert ts2("cp", f"{URI}/forty.bin", out).returncode == 0
+    assert out.read_bytes() == big.read_bytes()
+    assert ts2("rm", f"{URI}/forty.bin").returncode == 0
+
+
 def test_error_prints_problem_title(tmp_path):
     r = ts2("cp", f"{URI}/nope", tmp_path / "nope")
     assert r.returncode == 1
