@@ -32,7 +32,7 @@ Config is `config/frontdoor.yaml` (limits, listen address, data paths). Try the 
 | `TS2_GC_MIN_AGE_SECS` | Orphan GC never deletes chunks younger than this. Default 3600. Keep it well above the longest upload. |
 | `TS2_GC_INTERVAL_SECS` | Time between GC sweeps. Default 600. |
 
-Set both addresses or neither. Remote mode connects lazily, so frontdoor starts before the services are up; requests fail with 503 until they are. Upstream failures map to 503 (unavailable), 504 (deadline), 507 (node out of space) and 404 (`chunk-not-found`), not 500. In remote mode a background task deletes chunks that no manifest references (see `ts2-core/src/gc.rs`). `make e2e-native` runs the smoke test this way against the locally built C++ binaries.
+Set both addresses or neither. Remote mode connects lazily, so frontdoor starts before the services are up; requests fail with 503 until they are. Upstream failures map to 503 (unavailable), 504 (deadline) and 507 (node out of space). A chunk that a manifest references but its node no longer has is lost data and returns 500. At startup frontdoor asks each node who it is and refuses to start if a node reports a different id than the config; a background check keeps unhealthy or full nodes out of placement. Calls to the services repeat once on UNAVAILABLE when that is safe (never PutManifest). `TS2_PUT_TIMEOUT_SECS` (default 900) bounds a whole PUT, and `TS2_GC_MIN_AGE_SECS` must be at least twice that. Overwrite and delete leave the old chunks to GC. A background task deletes chunks that no manifest references (see `ts2-core/src/gc.rs`). `make e2e-native` runs the smoke test this way against the locally built C++ binaries.
 
 ## Design
 
