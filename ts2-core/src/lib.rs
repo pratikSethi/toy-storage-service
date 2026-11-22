@@ -6,6 +6,7 @@ pub mod gc;
 mod model;
 mod object;
 mod object_index;
+pub mod placement;
 pub mod remote;
 
 pub use chunk_store::{LOCAL_NODE, LocalChunkStore, valid_chunk_id};
@@ -41,7 +42,7 @@ pub trait ObjectIndex: Send + Sync {
 }
 
 /// Stores chunk bytes on one or more nodes. Local disk or gRPC to C++ nodes.
-/// Placement (which node gets a chunk) is decided in `object.rs`; the manifest records the node,
+/// Placement (which node gets a chunk) is decided in `placement.rs`; the manifest records the node,
 /// and every call names it.
 #[async_trait::async_trait]
 pub trait ChunkStore: Send + Sync {

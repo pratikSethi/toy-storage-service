@@ -1,3 +1,4 @@
+use crate::placement::rendezvous;
 use crate::{ChunkRef, ChunkStore, Error, Limits, Manifest, ObjectIndex, Result};
 use bytes::{Bytes, BytesMut};
 use chrono::Utc;
@@ -7,11 +8,10 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-/// Placement is decided here, not in the index: the first 8 hex digits of the (random) chunk id,
-/// modulo the node count. Stable for a given node list; rebalancing is a later problem.
+/// Placement is decided here, not in the index: rendezvous hashing over the placeable nodes (see
+/// `placement.rs`). R=1 for now, so only the best node is used.
 fn place(chunk_id: &str, nodes: &[String]) -> String {
-    let n = u32::from_str_radix(&chunk_id[..8], 16).unwrap_or(0) as usize;
-    nodes[n % nodes.len()].clone()
+    rendezvous(chunk_id, nodes, 1).remove(0)
 }
 
 pub fn validate_bucket_name(name: &str) -> Result<()> {
