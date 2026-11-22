@@ -7,9 +7,11 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-/// Placement is decided here, not in the index. One node in v0.1.
-fn place(_chunk_id: &str) -> &'static str {
-    "local"
+/// Placement is decided here, not in the index: the first 8 hex digits of the (random) chunk id,
+/// modulo the node count. Stable for a given node list; rebalancing is a later problem.
+fn place(chunk_id: &str, nodes: &[String]) -> String {
+    let n = u32::from_str_radix(&chunk_id[..8], 16).unwrap_or(0) as usize;
+    nodes[n % nodes.len()].clone()
 }
 
 pub fn validate_bucket_name(name: &str) -> Result<()> {
@@ -44,9 +46,10 @@ async fn write_chunk(
     written: &mut Vec<ChunkRef>,
 ) -> Result<()> {
     let chunk_id = uuid::Uuid::new_v4().simple().to_string();
-    chunks.put(&chunk_id, data.clone()).await?;
+    let node_id = place(&chunk_id, &chunks.nodes());
+    chunks.put(&node_id, &chunk_id, data.clone()).await?;
     written.push(ChunkRef {
-        node_id: place(&chunk_id).to_owned(),
+        node_id,
         length: data.len() as u64,
         checksum: hex::encode(Sha256::digest(&data)),
         chunk_id,
@@ -82,7 +85,7 @@ where
     .await;
     if result.is_err() {
         for c in &written {
-            let _ = chunks.delete(&c.chunk_id).await;
+            let _ = chunks.delete(&c.node_id, &c.chunk_id).await;
         }
     }
     result
@@ -123,7 +126,7 @@ where
     if !inline && !buf.is_empty() {
         write_chunk(chunks, buf.freeze(), written).await?;
     }
-    index
+    let (stored, previous) = index
         .put_manifest(Manifest {
             bucket: bucket.to_owned(),
             key: key.to_owned(),
@@ -137,7 +140,15 @@ where
             chunk_bytes: limits.chunk_bytes as u64,
             chunks: written.clone(),
         })
-        .await
+        .await?;
+    // An overwrite replaced the old manifest, so its chunks are garbage now. Best effort: orphan GC is the safety net.
+    // A GET that is still streaming the old version can fail when this lands.
+    if let Some(old) = previous {
+        for c in old.chunks {
+            let _ = chunks.delete(&c.node_id, &c.chunk_id).await;
+        }
+    }
+    Ok(stored)
 }
 
 /// Streams bytes `start..end` (end exclusive, already clamped to the size). Each chunk that overlaps the
@@ -164,7 +175,7 @@ pub fn object_stream(
             let (m, chunks) = (manifest.clone(), chunks.clone());
             async move {
                 let c = &m.chunks[i as usize];
-                let data = chunks.get(&c.chunk_id, None).await?;
+                let data = chunks.get(&c.node_id, &c.chunk_id, None).await?;
                 if data.len() as u64 != c.length || hex::encode(Sha256::digest(&data)) != c.checksum
                 {
                     return Err(Error::Corrupt(c.chunk_id.clone()));
@@ -187,7 +198,7 @@ pub async fn delete_object(
     key: &str,
 ) -> Result<()> {
     for c in index.delete_manifest(bucket, key).await?.chunks {
-        let _ = chunks.delete(&c.chunk_id).await;
+        let _ = chunks.delete(&c.node_id, &c.chunk_id).await;
     }
     Ok(())
 }

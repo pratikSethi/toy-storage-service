@@ -5,6 +5,9 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
+/// The only node id the local store has.
+pub const LOCAL_NODE: &str = "local";
+
 /// One file per chunk: `<root>/data/chunks/ab/cd/<id>`. Writes go to `<root>/tmp/`, are fsynced, then renamed.
 pub struct LocalChunkStore {
     root: PathBuf,
@@ -25,7 +28,7 @@ impl LocalChunkStore {
     }
 
     fn path(&self, id: &str) -> Result<PathBuf> {
-        if id.len() < 4 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
+        if !valid_chunk_id(id) {
             return Err(Error::Internal(format!("bad chunk id {id:?}")));
         }
         Ok(self
@@ -35,6 +38,12 @@ impl LocalChunkStore {
             .join(&id[2..4])
             .join(id))
     }
+}
+
+/// Exactly 32 lowercase hex characters, the same rule as the C++ nodes. The id becomes a file name,
+/// so this is also the path traversal guard.
+pub fn valid_chunk_id(id: &str) -> bool {
+    id.len() == 32 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 /// Flush to stable storage. fsync on macOS does not flush the drive cache, F_FULLFSYNC does.
@@ -59,7 +68,11 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T> + Send + 'sta
 
 #[async_trait::async_trait]
 impl ChunkStore for LocalChunkStore {
-    async fn put(&self, chunk_id: &str, data: Bytes) -> Result<()> {
+    fn nodes(&self) -> Vec<String> {
+        vec![LOCAL_NODE.to_owned()]
+    }
+
+    async fn put(&self, _node: &str, chunk_id: &str, data: Bytes) -> Result<()> {
         let dest = self.path(chunk_id)?;
         let tmp = self.root.join("tmp").join(chunk_id);
         blocking(move || {
@@ -76,7 +89,7 @@ impl ChunkStore for LocalChunkStore {
         .await
     }
 
-    async fn get(&self, chunk_id: &str, range: Option<Range<u64>>) -> Result<Bytes> {
+    async fn get(&self, _node: &str, chunk_id: &str, range: Option<Range<u64>>) -> Result<Bytes> {
         let path = self.path(chunk_id)?;
         blocking(move || {
             let mut f = File::open(&path)?;
@@ -93,7 +106,7 @@ impl ChunkStore for LocalChunkStore {
         .await
     }
 
-    async fn delete(&self, chunk_id: &str) -> Result<()> {
+    async fn delete(&self, _node: &str, chunk_id: &str) -> Result<()> {
         let path = self.path(chunk_id)?;
         blocking(move || match fs::remove_file(path) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),

@@ -14,7 +14,7 @@ opentelemetry_sdk = { version = "0.33.1", default-features = false, features = [
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 serde_yaml_ng = "0.10.0"
-tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "fs"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "fs", "time"] }
 tower = { version = "0.5.3", features = ["util"] }
 tower-http = { version = "0.7.1", features = ["request-id", "set-header", "propagate-header", "fs"] }
 tracing = "0.1.44"

@@ -1,4 +1,5 @@
 pub mod error;
+pub mod gc;
 pub mod handlers;
 pub mod metrics;
 

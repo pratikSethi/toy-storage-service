@@ -76,6 +76,30 @@ impl IntoResponse for ApiError {
                 "range-not-satisfiable",
                 "Range not satisfiable",
             ),
+            Error::ChunkNotFound(_) => {
+                (StatusCode::NOT_FOUND, "chunk-not-found", "Chunk not found")
+            }
+            Error::Unavailable(_) => {
+                tracing::warn!(error = %self.0, "backing service unavailable");
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "service-unavailable",
+                    "Service unavailable",
+                )
+            }
+            Error::Timeout(_) => {
+                tracing::warn!(error = %self.0, "backing service timed out");
+                (
+                    StatusCode::GATEWAY_TIMEOUT,
+                    "upstream-timeout",
+                    "Upstream timeout",
+                )
+            }
+            Error::DiskFull => (
+                StatusCode::INSUFFICIENT_STORAGE,
+                "insufficient-storage",
+                "Insufficient storage",
+            ),
             Error::Corrupt(_) | Error::Internal(_) => {
                 tracing::error!(error = %self.0, "internal error");
                 (
@@ -85,8 +109,11 @@ impl IntoResponse for ApiError {
                 )
             }
         };
+        // Internal and upstream details (addresses, gRPC messages) stay in the log.
         let detail = if status == StatusCode::INTERNAL_SERVER_ERROR {
             "internal error".into()
+        } else if matches!(self.0, Error::Unavailable(_) | Error::Timeout(_)) {
+            title.to_lowercase()
         } else {
             self.0.to_string()
         };

@@ -122,7 +122,11 @@ async fn corrupt_chunk_is_detected() {
     .await
     .unwrap();
     chunks
-        .put(&m.chunks[0].chunk_id, Bytes::from_static(&[0u8; 16]))
+        .put(
+            &m.chunks[0].node_id,
+            &m.chunks[0].chunk_id,
+            Bytes::from_static(&[0u8; 16]),
+        )
         .await
         .unwrap();
     let r = object_stream(m, chunks.clone(), 0, 20)
@@ -170,7 +174,7 @@ async fn delete_removes_chunks_and_overwrite_bumps_version() {
     .await
     .unwrap();
     delete_object(&index, &*chunks, "b", "j").await.unwrap();
-    assert_eq!(chunk_files(dir.path()), 2); // overwritten "k" chunks stay orphaned until GC exists
+    assert_eq!(chunk_files(dir.path()), 0); // the overwrite deleted "k"'s old chunks, the delete removed "j"'s
 }
 
 #[test]

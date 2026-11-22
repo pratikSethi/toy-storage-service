@@ -129,20 +129,21 @@ impl ObjectIndex for SqliteObjectIndex {
         .await
     }
 
-    async fn put_manifest(&self, mut manifest: Manifest) -> Result<Manifest> {
+    async fn put_manifest(&self, mut manifest: Manifest) -> Result<(Manifest, Option<Manifest>)> {
         self.run(move |conn| {
             let tx = conn.transaction()?;
             if !bucket_exists(&tx, &manifest.bucket)? {
                 return Err(Error::BucketNotFound);
             }
-            let previous: Option<i64> = tx
+            let json: Option<String> = tx
                 .query_row(
-                    "SELECT version FROM manifests WHERE bucket = ?1 AND key = ?2",
+                    "SELECT manifest FROM manifests WHERE bucket = ?1 AND key = ?2",
                     params![manifest.bucket, manifest.key],
                     |r| r.get(0),
                 )
                 .optional()?;
-            manifest.version = previous.map_or(1, |v| v as u64 + 1);
+            let previous = json.map(parse_manifest).transpose()?;
+            manifest.version = previous.as_ref().map_or(1, |p| p.version + 1);
             let json = serde_json::to_string(&manifest).map_err(|e| Error::Internal(e.to_string()))?;
             tx.execute(
                 "INSERT OR REPLACE INTO manifests (bucket, key, version, size, etag, created_at, manifest)
@@ -158,7 +159,7 @@ impl ObjectIndex for SqliteObjectIndex {
                 ],
             )?;
             tx.commit()?;
-            Ok(manifest)
+            Ok((manifest, previous))
         })
         .await
     }

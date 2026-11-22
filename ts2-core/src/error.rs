@@ -18,6 +18,16 @@ pub enum Error {
     RangeNotSatisfiable { size: u64 },
     #[error("chunk {0} failed its checksum")]
     Corrupt(String),
+    #[error("chunk {0} not found on its node")]
+    ChunkNotFound(String),
+    /// A backing service cannot be reached or is starting up (gRPC UNAVAILABLE).
+    #[error("backing service unavailable: {0}")]
+    Unavailable(String),
+    /// A backing service missed its deadline.
+    #[error("backing service timed out: {0}")]
+    Timeout(String),
+    #[error("chunk node is out of disk space")]
+    DiskFull,
     #[error("internal error: {0}")]
     Internal(String),
 }
