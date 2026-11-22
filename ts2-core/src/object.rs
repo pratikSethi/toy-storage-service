@@ -58,7 +58,8 @@ async fn write_chunk(
 }
 
 /// Reads the body in `chunk_bytes` slices, writes each chunk, then commits the manifest.
-/// Chunks are durable before the manifest exists. On failure the chunks already written are deleted.
+/// Chunks are durable before the manifest exists. On a definite failure the chunks already written are deleted;
+/// when the outcome of `put_manifest` is unknown they stay for GC.
 pub async fn put_object<S>(
     mut body: S,
     bucket: &str,
@@ -89,6 +90,14 @@ where
         }
     }
     result
+}
+
+/// Errors from `put_manifest` that prove nothing was committed.
+fn is_definite_rejection(e: &Error) -> bool {
+    matches!(
+        e,
+        Error::BucketNotFound | Error::InvalidBucketName | Error::InvalidKey(_)
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -126,7 +135,7 @@ where
     if !inline && !buf.is_empty() {
         write_chunk(chunks, buf.freeze(), written).await?;
     }
-    let (stored, previous) = index
+    let committed = index
         .put_manifest(Manifest {
             bucket: bucket.to_owned(),
             key: key.to_owned(),
@@ -140,7 +149,17 @@ where
             chunk_bytes: limits.chunk_bytes as u64,
             chunks: written.clone(),
         })
-        .await?;
+        .await;
+    let (stored, previous) = match committed {
+        Ok(r) => r,
+        // Timeout, Unavailable and the like may arrive after the index committed. The manifest could then
+        // point at these chunks, so they are not deleted here; GC removes them if they turn out to be orphans.
+        Err(e) if !is_definite_rejection(&e) => {
+            written.clear();
+            return Err(e);
+        }
+        Err(e) => return Err(e),
+    };
     // An overwrite replaced the old manifest, so its chunks are garbage now. Best effort: orphan GC is the safety net.
     // A GET that is still streaming the old version can fail when this lands.
     if let Some(old) = previous {

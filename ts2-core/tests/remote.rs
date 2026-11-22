@@ -27,6 +27,8 @@ struct Fake {
     /// PutChunk fails with UNAVAILABLE once this many puts have succeeded.
     puts_before_down: Option<usize>,
     puts: usize,
+    /// PutManifest stores the manifest, then answers with this code: the response was lost.
+    commit_then_fail: Option<Code>,
     put_delay: Duration,
     /// Frame sizes of the last PutChunk.
     put_frames: Vec<usize>,
@@ -203,6 +205,9 @@ impl ObjectIndexService for IndexSvc {
         let previous = f.manifests.get(&k).cloned();
         m.version = previous.as_ref().map_or(1, |p| p.version + 1);
         f.manifests.insert(k, m.clone());
+        if let Some(code) = f.commit_then_fail {
+            return Err(Status::new(code, "response lost"));
+        }
         Ok(Response::new(pb::PutManifestResponse {
             manifest: Some(m),
             previous,
@@ -397,15 +402,48 @@ async fn node_down_mid_upload_is_unavailable_and_cleans_up() {
 }
 
 #[tokio::test]
-async fn index_down_after_chunks_written_cleans_up() {
+async fn definite_index_rejection_cleans_up_the_chunks() {
+    let c = cluster(Deadlines::default()).await;
+    c.state.lock().unwrap().index_fail = Some((Code::NotFound, "bucket not found: b".into()));
+    let err = put(&c, "k", &[1u8; 40]).await.unwrap_err();
+    assert!(matches!(err, Error::BucketNotFound), "{err:?}");
+    assert!(
+        c.state.lock().unwrap().chunks.is_empty(),
+        "the index said no, so nothing references the chunks"
+    );
+}
+
+#[tokio::test]
+async fn index_commits_then_answers_unavailable_keeps_the_chunks() {
+    let c = cluster(Deadlines::default()).await;
+    c.state.lock().unwrap().commit_then_fail = Some(Code::Unavailable);
+    let err = put(&c, "k", &[1u8; 40]).await.unwrap_err();
+    assert!(matches!(err, Error::Unavailable(_)), "{err:?}");
+    let f = c.state.lock().unwrap();
+    let m = &f.manifests[&("b".into(), "k".into())];
+    assert_eq!(m.chunks.len(), 3);
+    assert!(
+        m.chunks.iter().all(|r| f.chunks.contains_key(&r.chunk_id)),
+        "the committed manifest still has all its chunks"
+    );
+}
+
+#[tokio::test]
+async fn index_unavailable_before_commit_leaves_chunks_for_gc() {
+    // From the client the two cases look the same, so the chunks stay and GC decides after min_age.
     let c = cluster(Deadlines::default()).await;
     c.state.lock().unwrap().index_fail = Some((Code::Unavailable, "starting".into()));
     let err = put(&c, "k", &[1u8; 40]).await.unwrap_err();
     assert!(matches!(err, Error::Unavailable(_)), "{err:?}");
-    assert!(
-        c.state.lock().unwrap().chunks.is_empty(),
-        "no chunk is left without a manifest"
-    );
+    let deleted = gc::sweep(&c.index, &c.chunks, Duration::from_secs(1))
+        .await
+        .err();
+    assert!(deleted.is_some(), "index is down, so the sweep aborts");
+    c.state.lock().unwrap().index_fail = None;
+    let deleted = gc::sweep(&c.index, &c.chunks, Duration::from_secs(1))
+        .await
+        .unwrap();
+    assert_eq!(deleted, 3, "the orphans go once the index answers");
 }
 
 #[tokio::test]
