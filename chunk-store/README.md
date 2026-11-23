@@ -2,7 +2,7 @@
 
 C++20 (gRPC, protobuf, spdlog, Catch2, built with CMake and vcpkg). The binary is `ts2-chunk-store`. It runs on each storage node.
 
-An object is cut into fixed-size chunks, and each chunk is identified by a hash of its bytes. ChunkStoreService is the process that keeps those chunks on one node's disk. The gateway sends it chunks to store and asks for them back, in whole or by byte range. It knows nothing about objects, keys or buckets; that is the index's job.
+An object is cut into fixed-size chunks, and each chunk has a random id. ChunkStoreService is the process that keeps those chunks on one node's disk. FrontdoorService sends it chunks to store and asks for them back, in whole or by byte range. It knows nothing about objects, keys or buckets; that is the index's job.
 
 ## What it owns
 

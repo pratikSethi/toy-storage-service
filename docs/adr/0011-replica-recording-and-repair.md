@@ -1,6 +1,6 @@
 # ADR 0011: Replica recording and repair
 
-Status: accepted
+Status: accepted, partly built
 
 ## Context
 
@@ -12,6 +12,8 @@ With W=2 of R=3 ([ADR 0010](0010-replication-and-the-meaning-of-201.md)), the th
 - **Stragglers are not referenced.** A replica that finishes after the ack is not in the manifest, so it is an orphan. FrontdoorService does not cancel or delete it. GC removes it after the minimum age ([ADR 0013](0013-gc-ownership-per-cell.md)).
 - **Repair edits the manifest with a compare-and-swap.** `PutManifest` takes the version the caller read. If the stored version differs, the write is rejected. Repair re-reads and retries or gives up, so it cannot bring back chunks of an object that was overwritten meanwhile.
 - **Placement** uses rendezvous (highest random weight) hashing over healthy nodes, ranked per chunk id. Writes take the top R. Repair picks the next-ranked healthy node. Because reads follow the manifest, a change in the healthy set never makes existing data unfindable.
+
+**Today:** built: rendezvous placement over healthy nodes, with one copy per chunk. The proto manifest has a `node_ids` list that holds one node. Not built: more than one replica, stragglers, the version check in `PutManifest` (reserved in the proto, not implemented) and the repair job.
 
 ## Consequences
 

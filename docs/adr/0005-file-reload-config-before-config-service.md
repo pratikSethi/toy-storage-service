@@ -1,6 +1,6 @@
 # ADR 0005: File-reload config before a config service
 
-Status: accepted for v0
+Status: accepted for v0, not built
 
 ## Context
 
@@ -9,6 +9,8 @@ Limits (such as `max_object_bytes`) and feature flags need to change without red
 ## Decision
 
 Each service loads a config file at start and reloads it on change, through SIGHUP or a file watch. The file has a `limits` block and a `flags` block. A bad file is rejected and the previous config stays active. A config service and OpenFeature/flagd are deferred.
+
+**Today:** FrontdoorService reads `config/frontdoor.yaml` once at start. There is no reload, no `flags` block and no bad-file rollback. The C++ services read environment variables. A config service is also not built.
 
 ## Consequences
 

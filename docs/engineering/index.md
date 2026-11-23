@@ -35,26 +35,27 @@ Pages: [components](components.md), [operations](operations.md), [system overvie
 
 ## Architecture
 
-Clients talk only to FrontdoorService. It cuts uploads into chunks, writes them to ChunkStoreService nodes, then writes the manifest to ObjectIndexService. Reads go the other way. Each box names its language.
+Clients talk only to FrontdoorService. It cuts uploads into chunks, writes them to ChunkStoreService nodes, then writes the manifest to ObjectIndexService. Reads go the other way. Each box names its language. The diagram shows what is built: one cell, no separate bucket service.
 
 ```mermaid
 flowchart LR
   C["ts2 CLI<br/>(Python)"] --> F["FrontdoorService<br/>(Rust)"]
-  F --- R["BucketRegistry<br/>(Rust module, Go from v0.4)"]
   subgraph Cell["Cell"]
     I["ObjectIndexService<br/>(C++)"]
     N1["ChunkStoreService<br/>(C++)"]
     N2["ChunkStoreService<br/>(C++)"]
     N3["ChunkStoreService<br/>(C++)"]
+    N4["ChunkStoreService<br/>(C++)"]
   end
   F -->|manifests| I
   F -->|chunks| N1
   F -->|chunks| N2
   F -->|chunks| N3
+  F -->|chunks| N4
   F -.->|OTLP| O["Observability<br/>(Collector, VictoriaMetrics, VictoriaLogs, Grafana)"]
 ```
 
-Until the C++ services exist, `ts2-core` runs a SQLite file as the index and a local directory as the chunk store, inside the FrontdoorService process. They implement the same traits the real services will.
+`make run` starts FrontdoorService alone, and then `ts2-core` runs a SQLite file as the index and a local directory as the chunk store inside the FrontdoorService process. `make up` uses the C++ services instead. Both modes implement the same traits.
 
 ## Try it
 
@@ -101,7 +102,7 @@ The [demo](../demo.md) covers range reads, paging, errors and the 413 limit. A r
 | Milestone | Scope | Status |
 |-----------|-------|--------|
 | v0.1 | Single node: FrontdoorService, SQLite index, local-disk chunks, CLI, compose, observability | Done: `57cc01a`, `5a08d40`, `3f0efb0`, `14b88b9`, `0f8703f` |
-| v0.2 | C++ ChunkStoreService and ObjectIndexService, 3 nodes, API key auth | In progress: proto and C++ scaffold |
+| v0.2 | C++ ChunkStoreService and ObjectIndexService, 4 nodes, API key auth | Partly done: both C++ services, four nodes, rendezvous placement and orphan chunk cleanup are built. API key auth, the chunk token, config reload and C++ service metrics are not built. |
 | v0.3 | Multipart upload, presigned URLs, quotas, RocksDB index | Planned |
 | v0.4 | Two cells, R=3 replication, failure drills, Go BucketRegistryService | Planned |
 | v0.5 | Erasure coding k=4 m=2, scrub and repair | Planned |

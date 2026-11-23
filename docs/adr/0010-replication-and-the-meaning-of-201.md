@@ -1,6 +1,6 @@
 # ADR 0010: Replication R and W, and what 201 means
 
-Status: accepted
+Status: accepted, not built yet
 
 ## Context
 
@@ -18,6 +18,8 @@ A 201 means:
 An acknowledged object can be under-replicated (2 copies, not 3) until repair catches up. The durability model and the SLO assume this. A repair job is required before W=2 ships, and until then the cell runs W=R=3.
 
 **Why 4 nodes.** With 3 nodes and R=3, one node down means a PUT has nowhere to put its third replica, so writes stop. With 4, placement can pick any 3 healthy nodes and one node down does not stop writes. Four nodes also let us see placement: different chunks land on different subsets, which a 3-of-3 layout hides.
+
+**Today:** each chunk is written to one node (R=1) and a 201 means that copy is durable and the manifest is committed. The four-node cell exists. Writing 3 copies, acknowledging at 2, and the repair job are not built.
 
 ## Consequences
 

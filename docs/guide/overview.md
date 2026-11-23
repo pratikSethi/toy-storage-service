@@ -1,6 +1,6 @@
 # What TS2 is
 
-TS2 is an internal object storage service. It gives your team durable storage for files of any type: images, video, datasets, backups, logs. You store a file under a name and read the same bytes back later, from anywhere that can reach the endpoint.
+TS2 is an internal object storage service. It gives your team storage for files of any type: images, video, datasets, backups, logs. It is not durable yet: each object has one copy. You store a file under a name and read the same bytes back later, from anywhere that can reach the endpoint.
 
 Everything is addressed by two names: a **bucket** (a named container) and a **key** (the object's name inside it). `photos` and `cats/cat.jpg` together identify one file.
 

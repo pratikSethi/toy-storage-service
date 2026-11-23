@@ -1,6 +1,6 @@
 # ADR 0012: Node ids are permanent
 
-Status: accepted
+Status: accepted, built
 
 ## Context
 
@@ -11,6 +11,8 @@ Node ids are written into every manifest ([ADR 0011](0011-replica-recording-and-
 Each ChunkStoreService node has a permanent id, created with its data directory. The node reports it in `NodeInfo`. At startup FrontdoorService calls `NodeInfo` on every configured node and refuses to use a node whose reported id differs from the config.
 
 Ids never change and are never reused, even after a node is retired.
+
+**Today:** built in commit `17d361a`. The context paragraph above describes the problem as it was before that commit.
 
 ## Consequences
 

@@ -1,6 +1,6 @@
 # ADR 0009: Bucket-to-cell map
 
-Status: accepted
+Status: accepted, not built yet
 
 ## Context
 
@@ -13,6 +13,8 @@ Until the Go BucketRegistryService exists (v0.4), the map is static and lives in
 - **CreateBucket** picks the cell with a rule in config, for example a default cell or a prefix match on the bucket name. The result is recorded in that cell's index and is stable afterwards.
 - **Bucket names are globally unique.** FrontdoorService checks every cell before creating. Two concurrent creates of the same name in different cells can both pass the check. We accept that race at toy scale. The registry fixes it later by serialising name claims.
 - **ListBuckets** fans out to all cells and merges the results.
+
+**Today:** nothing here exists. There is one cell, no map, no create-time cell choice, no cross-cell name check and no ListBuckets fan-out.
 
 ## Consequences
 

@@ -1,6 +1,6 @@
 # ADR 0004: Cells for the data plane, thin global layer
 
-Status: accepted
+Status: accepted, partly built
 
 ## Context
 
@@ -11,6 +11,8 @@ One big shared data plane means any bug or overload can affect every tenant, and
 The data plane is deployed as cells. A cell is a self-sufficient copy of the data plane (one ObjectIndexService plus N ChunkStoreService nodes) serving a fixed subset of buckets. Cells never talk to each other. Above the cells is a thin global layer: the FrontdoorService router and BucketRegistry (bucket-to-cell map, tenant and quota data). Per-cell control functions (node membership, node list used for placement, health, rebalancing) live inside the cell.
 
 A tenant move copies manifests and chunks to another cell, flips the bucket in BucketRegistry, then garbage-collects the source.
+
+**Today:** there is one cell (one ObjectIndexService and four ChunkStoreService nodes in compose). Not built: a second cell, the thin global layer, BucketRegistry and the bucket-to-cell map.
 
 ## Consequences
 

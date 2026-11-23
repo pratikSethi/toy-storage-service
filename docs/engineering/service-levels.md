@@ -3,7 +3,7 @@
 The internal view of the [customer service levels](../guide/service-levels.md). This page defines what each service level measures, what we run to, when we alert, and who looks at which number.
 
 !!! warning "Illustrative numbers"
-    Every number marked with a superscript footnote is made up for the demo.[^illus] The burn-rate multipliers come from the Google SRE workbook. The request metrics exist today. The disk, repair and scrub metrics do not.
+    Every number marked with a superscript footnote is made up for the demo.[^illus] The burn-rate multipliers come from the Google SRE workbook. The request metrics exist today. The disk, repair and scrub metrics do not. This page describes the intended way of running TS2. No alert rules, on-call rota or review meetings exist, and neither does BucketRegistryService, so the control plane team below is planned.
 
 ## Two levels of review
 

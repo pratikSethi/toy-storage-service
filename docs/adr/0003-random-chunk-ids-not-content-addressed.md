@@ -1,6 +1,6 @@
 # ADR 0003: Random chunk ids, not content-addressed
 
-Status: accepted for v0
+Status: accepted for v0, built
 
 ## Context
 
@@ -9,6 +9,8 @@ A chunk needs an id that the manifest records. The id can be random or derived f
 ## Decision
 
 Chunk ids are random 128-bit values. The content hash is stored beside the id as the chunk's checksum, in the manifest and on ChunkStoreService, and is verified on read. FrontdoorService generates the id (in `ts2-core`) before the write. Each chunk belongs to exactly one manifest.
+
+**Today:** built. Placement uses rendezvous hashing over healthy nodes (`ts2-core/src/placement.rs`), not `hash(chunk_id) mod N` as written in the consequences below.
 
 ## Consequences
 

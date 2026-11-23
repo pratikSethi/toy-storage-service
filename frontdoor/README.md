@@ -9,7 +9,7 @@ When you upload an object, FrontdoorService checks the limits, cuts the bytes in
 - The `/v1` REST API: buckets, objects (PUT, GET with ranges, HEAD, DELETE) and listing.
 - Admission: size and key limits, errors as RFC 9457 problem details, request ids.
 - The OpenAPI 3.1 spec (served at `/openapi.json`, with a Scalar UI at `/docs`) and its checked-in copy at `docs/api/openapi.yaml`, written by a test.
-- Until v0.4, the in-process BucketRegistry module.
+- Not built: API key auth, config reload, load shedding and a separate bucket service. Buckets are stored by the index.
 
 ## Build, test, run
 

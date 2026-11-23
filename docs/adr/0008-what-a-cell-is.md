@@ -1,6 +1,6 @@
 # ADR 0008: What a cell is
 
-Status: accepted
+Status: accepted, partly built
 
 ## Context
 
@@ -15,6 +15,8 @@ Every bucket belongs to exactly one cell. Its manifests live in that cell's inde
 The failure domain this contains: a corrupt or lost index, a bad ObjectIndexService or ChunkStoreService deploy, or full nodes affect only the buckets in that cell. Buckets in other cells keep working.
 
 Per-cell availability in [service levels](../engineering/service-levels.md) follows from this. A cell's availability is measured for the buckets it owns.
+
+**Today:** one cell exists. FrontdoorService has no routing by bucket, because there is nothing to route between. Not built: a second cell, per-cell availability numbers.
 
 ## Consequences
 

@@ -15,7 +15,7 @@ Today there is one location and one cell. Letting customers pick a region, and l
 
 ## Service levels
 
-The service has five published service levels: durability, Tier 0 data availability, Tier 1 management and listing availability, latency and consistency. Each has an internal SLO that is stricter than the customer number, and burn-rate alerts that page or open a ticket. The definitions, thresholds and error budget are on [service levels for engineers](service-levels.md). This page covers the regions and cells we watch, and the weekly review.
+The service has five published service levels: durability, Tier 0 data availability, Tier 1 management and listing availability, latency and consistency. Each has an internal SLO that is stricter than the customer number, and a planned set of burn-rate alerts that page or open a ticket. No alert rules are built yet. The definitions, thresholds and error budget are on [service levels for engineers](service-levels.md). This page covers the regions and cells we watch, and the weekly review.
 
 ## Availability heat map
 

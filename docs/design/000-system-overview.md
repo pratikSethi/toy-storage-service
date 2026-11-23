@@ -2,7 +2,9 @@
 
 Status: draft. Read time: about 15 minutes.
 
-Glossary. The shape is front end, index, storage, like S3. **FrontdoorService** is the front end. **ObjectIndexService** is the index. **ChunkStoreService** is storage. **BucketRegistryService** holds buckets, tenants and quotas. A **cell** is a self-contained copy of one ObjectIndexService plus its ChunkStoreService nodes. Service names are multi-word on purpose, see [ADR 0007](../adr/0007-multi-word-service-names.md). Every diagram labels the language of each service.
+This page describes the design and marks what is built. Anything labelled **Planned** with a version, such as v0.4, is not built yet. [Backlog](../backlog.md) and [plan](../plan.md) list both.
+
+Glossary. The shape is front end, index, storage, like S3. **FrontdoorService** is the front end. **ObjectIndexService** is the index. **ChunkStoreService** is storage. **BucketRegistryService** (planned, not built) would hold buckets, tenants and quotas. A **cell** is a self-contained copy of one ObjectIndexService plus its ChunkStoreService nodes. Service names are multi-word on purpose, see [ADR 0007](../adr/0007-multi-word-service-names.md). Every diagram labels the language of each service.
 
 ## 1. Context
 
@@ -20,18 +22,33 @@ TS2 borrows the shape (front end, index, storage), the deterministic placement i
 
 Three layers, from the client inward:
 
-1. **FrontdoorService** (Rust, `frontdoor/`, binary `ts2-frontdoor`). The web service in front, and the only thing clients reach. It does admission: validates the request, checks size and key limits, later checks auth and quota, and sheds load with 429 or 503 plus `Retry-After`. It never queues requests. It does not write to a database per request; it emits an access log line and metrics instead. After admission it sends bucket and tenant operations to BucketRegistry and object bytes down the data path. It also chunks, hashes and places chunks, through the `ts2-core` library. Object bytes flow through FrontdoorService, see [ADR 0006](../adr/0006-object-bytes-through-frontdoor.md).
-2. **BucketRegistryService** (Go from v0.4, `bucket-registry/`). Tenants, buckets, quotas, the bucket-to-cell map and cell health. Until v0.4 it is an in-process Rust module of FrontdoorService called **BucketRegistry**, behind a `BucketRegistry` trait. In v0.1 bucket CRUD lives in the `ObjectIndex` trait because there is one cell and no tenants.
+1. **FrontdoorService** (Rust, `frontdoor/`, binary `ts2-frontdoor`). The web service in front, and the only thing clients reach. It does admission: validates the request and checks size and key limits. Planned, not built: auth, quota checks, and load shedding with 429 or 503 plus `Retry-After`. It does not write to a database per request; it emits an access log line and metrics instead. After admission it sends bucket operations and object bytes to ObjectIndexService and the ChunkStoreService nodes. It also chunks, hashes and places chunks, through the `ts2-core` library. Object bytes flow through FrontdoorService, see [ADR 0006](../adr/0006-object-bytes-through-frontdoor.md).
+2. **BucketRegistryService** (planned for v0.4, Go, `bucket-registry/`, not built). Tenants, buckets, quotas, the bucket-to-cell map and cell health. Today there is no registry and no `BucketRegistry` module. Bucket create, get, list and delete are part of the `ObjectIndex` trait: ObjectIndexService stores them in remote mode and `ts2-core`'s SQLite index stores them in single-process mode. There is one cell and no tenants.
 3. **Data plane.** Deployed as cells. Each cell has one ObjectIndexService (C++, `object-index/`, key to manifest) and several ChunkStoreService nodes (C++, `chunk-store/`, chunks).
 
-**What a ChunkStoreService node is.** One process that owns one data directory, which in production means one disk. A production host would have many HDD or NVMe drives and run one process per drive, so the failure domain is the rack. In the compose demo it is one container per node with a named volume. On AWS it is one EC2 instance with EBS or instance-store NVMe.
+**What a ChunkStoreService node is.** One process that owns one data directory, which in production means one disk. A production host would have many HDD or NVMe drives and run one process per drive, so the failure domain is the rack. In the compose demo it is one container per node with a named volume. Running on AWS (one EC2 instance with EBS or instance-store NVMe) is planned, not built.
+
+Built today, one cell:
+
+```mermaid
+flowchart TB
+  C["ts2 CLI (Python)"] --> G["FrontdoorService (Rust)"]
+  subgraph Cell0["Cell"]
+    I0["ObjectIndexService (C++)"]
+    N0["4 x ChunkStoreService (C++)"]
+  end
+  G -->|manifests and buckets| I0
+  G -->|chunks| N0
+```
+
+Planned for v0.4, not built: two cells and a thin global layer with a bucket registry.
 
 ```mermaid
 flowchart TB
   C["ts2 CLI (Python)"] --> G["FrontdoorService (Rust)"]
   subgraph Global["Thin global layer"]
     G
-    R["BucketRegistry (Rust module in v0.1 to v0.3,<br/>BucketRegistryService in Go from v0.4)"]
+    R["BucketRegistryService (Go, planned v0.4)"]
   end
   G -->|bucket, tenant, quota, cell map| R
   G -->|object bytes| Cell1
@@ -48,15 +65,19 @@ flowchart TB
   end
 ```
 
-### BucketRegistryService propagation after the v0.4 extraction
+### BucketRegistryService propagation (planned, not built)
+
+This is the design for v0.4. None of it exists yet.
 
 - FrontdoorService calls BucketRegistryService synchronously over gRPC (tonic client, Go gRPC server).
 - Registry reads are cached in FrontdoorService. Changes reach it by polling every few seconds. Push may come later.
 - Admin writes (create bucket, set quota) are proxied synchronously and are idempotent. FrontdoorService never acknowledges a write the registry has not committed.
-- `request_id` and the W3C `traceparent` header travel as gRPC metadata, so one request is traceable across services.
+- `request_id` and the W3C `traceparent` header would travel as gRPC metadata, so one request is traceable across services.
 - If BucketRegistryService is down, FrontdoorService keeps serving object traffic from its cache. With a cold cache it returns 503 plus `Retry-After`.
 
 ## 3. Cells
+
+Today there is one cell and no router. Everything below beyond that is planned for v0.4.
 
 A cell is a self-sufficient copy of the data plane: one ObjectIndexService plus N ChunkStoreService nodes, serving a fixed subset of buckets. Cells never talk to each other.
 
@@ -78,14 +99,14 @@ What cells give us:
 |---|---|---|---|
 | FrontdoorService | `frontdoor/` (binary `ts2-frontdoor`) | Rust | axum, tonic, tower, utoipa 5.x. Admission, routing, object data path. |
 | `ts2-core` | `ts2-core/` | Rust (library crate) | Chunking, hashing, placement, and the `ObjectIndex` and `ChunkStore` traits with their in-process SQLite and local-disk implementations. A direct-to-cell client could reuse it later. |
-| BucketRegistryService | in `frontdoor/` as `BucketRegistry` until v0.4, then `bucket-registry/` | Rust, then Go | Buckets, tenants, quotas, bucket-to-cell map. gRPC server from v0.4. |
-| ObjectIndexService | `object-index/` (not yet created) | C++ | Key to manifest, listing, and the list of referenced chunks (`ListChunkRefs`) for GC. SQLite first, RocksDB later. |
-| ChunkStoreService | `chunk-store/` (not yet created) | C++ | One process, one node, one disk. CMake, vcpkg, Catch2. |
-| `ts2` CLI | `cli/` | Python | typer, httpx, client generated from the OpenAPI file; installed with `uv tool install`. |
-| Web UI | `ui/` | TypeScript | Later, React possible. |
+| BucketRegistryService | `bucket-registry/` (not built, planned v0.4) | Go | Buckets, tenants, quotas, bucket-to-cell map. |
+| ObjectIndexService | `object-index/` | C++ | Bucket CRUD, key to manifest, listing, and the list of referenced chunks (`ListChunkRefs`) for GC. SQLite today, RocksDB planned (v0.3). |
+| ChunkStoreService | `chunk-store/` | C++ | One process, one node, one disk. CMake, vcpkg, Catch2. |
+| `ts2` CLI | `cli/` | Python | typer and plain httpx; installed with `uv tool install`. |
+| Web UI | `ui/` (not created) | TypeScript | Planned, no version yet. |
 | End-to-end tests | `tests/e2e/` | Python | uv, pytest, httpx; shares uv tooling with the CLI. |
 
-Contracts: the external API is OpenAPI 3.1. FrontdoorService uses utoipa 5.x (utoipa 4 emits 3.0) to build the spec from annotated axum handlers, serves it at `/openapi.json` and serves a Scalar UI at `/docs`. A test writes the spec to `docs/api/openapi.yaml`, so API changes show up in review diffs and the file imports into Bruno or curl workflows. The Python CLI client is generated from that file. `openapi-python-client` buffers request bodies in memory, so the CLI uses plain `httpx` for object bytes and the generated client for everything else. The internal API is Protobuf over gRPC in `proto/ts2/v1`. Rationale in [ADR 0001](../adr/0001-json-rest-over-s3-wire-compat.md) and [ADR 0002](../adr/0002-rust-frontdoor-go-bucket-registry-cpp-data-plane.md).
+Contracts: the external API is OpenAPI 3.1. FrontdoorService uses utoipa 5.x (utoipa 4 emits 3.0) to build the spec from annotated axum handlers, serves it at `/openapi.json` and serves a Scalar UI at `/docs`. A test writes the spec to `docs/api/openapi.yaml`, so API changes show up in review diffs and the file imports into Bruno or curl workflows. The CLI does not use a generated client. It calls the API with plain `httpx`, which streams object bytes. The internal API is Protobuf over gRPC in `proto/ts2/v1`. Rationale in [ADR 0001](../adr/0001-json-rest-over-s3-wire-compat.md) and [ADR 0002](../adr/0002-rust-frontdoor-go-bucket-registry-cpp-data-plane.md).
 
 The in-process traits are async and chunk-granular from the start, shaped like the gRPC calls that replace them. `ChunkStore::put` takes one chunk (at most `chunk_bytes`, 4 MiB by default) and FrontdoorService streams the object through them, so memory per request stays bounded.
 
@@ -94,7 +115,7 @@ External endpoints (all under `/v1`):
 - Buckets: create, list, get, delete. Deleting a non-empty bucket returns 409.
 - Objects at `/v1/buckets/{bucket}/objects/{*key}`: PUT, GET (with `Range`), HEAD, DELETE. Keys may contain slashes. They are percent-decoded once, and empty keys and `..` segments are rejected with 400.
 - List objects: GET with `prefix`, `start_after`, `max_keys`. The IETF HTTP QUERY method is parked until it is an RFC.
-- `GET /healthz`, `GET /v1/quotas` (v0.3).
+- `GET /healthz`. Planned: `GET /v1/quotas` (v0.3).
 
 ## 5. Request paths
 
@@ -102,7 +123,7 @@ Terms: a **chunk** is a fixed-size slice of an object. A **manifest** is the rec
 
 ### Placement
 
-Placement is owned by `ts2-core` inside FrontdoorService. ObjectIndexService does not place chunks. For each chunk FrontdoorService generates a random `chunk_id`, then picks the node with a pure function: v0.2 `node = hash(chunk_id) mod N` over the cell's node list with replication factor R=1, and from v0.4 R=3 across failure domains. The node list comes from FrontdoorService's config in v0.2 and from BucketRegistry once it holds the cell map. Like Ceph's CRUSH the rule is deterministic, but the manifest records the `node_id` of every chunk, so changing the rule later does not strand old objects.
+Placement is owned by `ts2-core` inside FrontdoorService. ObjectIndexService does not place chunks. For each chunk FrontdoorService generates a random `chunk_id`, then picks the node with a pure function: rendezvous hashing (`ts2-core/src/placement.rs`) over the healthy nodes, with one copy per chunk (R=1). Planned for v0.4: R=3 across failure domains. The node list comes from FrontdoorService's config (`TS2_CHUNK_NODES`). Planned: the node list comes from the bucket registry once it holds the cell map. Like Ceph's CRUSH the rule is deterministic, but the manifest records the `node_id` of every chunk, so changing the rule later does not strand old objects.
 
 ### PUT
 
@@ -112,14 +133,12 @@ Invariant: chunks are durable before the manifest is committed. A crash in betwe
 sequenceDiagram
   participant C as ts2 CLI (Python)
   participant G as FrontdoorService (Rust)
-  participant R as BucketRegistry (Rust, Go from v0.4)
   participant M as ObjectIndexService (C++)
   participant N as ChunkStoreService (C++)
   C->>G: PUT /v1/buckets/b/objects/k
-  G->>G: admission (limits, later auth and quota)
-  G->>R: bucket -> cell (cached)
+  G->>G: admission (limits)
   G->>G: chunk the stream, hash each chunk, place by ts2-core
-  par per chunk, in parallel
+  loop each chunk, one after another
     G->>N: gRPC stream chunk
     N->>N: tmp file, write, fsync, rename, fsync parent dir
     N-->>G: ack + checksum
@@ -131,7 +150,7 @@ sequenceDiagram
 
 The body limit of axum (2 MiB by default) is disabled on PUT. FrontdoorService enforces `max_object_bytes` while streaming, and returns 413 as soon as the declared `Content-Length` or the bytes read exceed it. Chunked uploads without `Content-Length` are accepted.
 
-Overwrite is last writer wins: the second PUT replaces the manifest and increments `version`. `If-None-Match: *` makes a PUT create-only and returns 412 if the key exists. `If-Match` is planned with versioning (not v0).
+Overwrite is last writer wins: the second PUT replaces the manifest and increments `version`. Planned, not built: `If-None-Match: *` to make a PUT create-only (412 if the key exists), and `If-Match` with versioning.
 
 ### GET
 
@@ -178,7 +197,7 @@ sequenceDiagram
 
 ### DELETE
 
-Delete removes the manifest in one transaction and returns 204. The chunks become orphans. In v0.1 FrontdoorService also deletes them best effort right after the manifest, and a failure there is ignored. The real cleanup is the diff-based GC in section 12, which finds any orphan regardless of how it came about. Deleting the manifest first keeps the invariant: no manifest ever points at a missing chunk.
+Delete removes the manifest in one transaction and returns 204. The chunks become orphans. In single-process mode FrontdoorService also deletes them best effort right after the manifest, and a failure there is ignored. In remote mode it does not, and the cleanup is left to the diff-based GC in section 12, which finds any orphan regardless of how it came about. Deleting the manifest first keeps the invariant: no manifest ever points at a missing chunk.
 
 ```mermaid
 sequenceDiagram
@@ -190,7 +209,7 @@ sequenceDiagram
   G->>M: delete manifest (one transaction)
   M-->>G: ok
   G-->>C: 204
-  M-)N: GC: list chunks, delete orphans older than the minimum age (async)
+  G-)N: GC later (remote mode): list chunks, delete orphans older than the minimum age
 ```
 
 ### List
@@ -231,26 +250,26 @@ Chunk ids are random 128-bit values. The content hash is stored beside the id as
 
 ## 7. On-disk layout
 
-Both layouts sit behind one ChunkStore interface: `put`, `get(range)`, `delete`, `list` (chunk ids with their creation time, for GC). On disk each chunk is `<id>` plus a sidecar `<id>.sha256`, written to `tmp/` and renamed sidecar first, data last; a data file without a sidecar is corrupt and never served. C++ and Rust data dirs are not interchangeable, and `scrub` later. In v0.1 the interface is the Rust `ChunkStore` trait in `ts2-core`. From the ChunkStoreService step it is a gRPC service implemented in C++.
+Both layouts sit behind one ChunkStore interface: `put`, `get(range)`, `delete`, `list` (chunk ids with their creation time, for GC). In ChunkStoreService (C++) each chunk is `<id>` plus a sidecar `<id>.sha256`, written to `tmp/` and renamed sidecar first, data last; a data file without a sidecar is corrupt and never served. The in-process Rust store keeps bare chunk files with no sidecar, so the two data dirs are not interchangeable. A scrub pass that re-reads chunks is planned (v0.5). In single-process mode the interface is the Rust `ChunkStore` trait in `ts2-core`. In remote mode it is the gRPC service implemented in C++.
 
-**v0.1: one file per chunk.** MinIO style, easy to debug with `ls`.
+**Built: one file per chunk.** MinIO style, easy to debug with `ls`. ChunkStoreService lays out its data dir like this:
 
 ```
-node-root/
-  node.json
+data-dir/
   tmp/                 in-flight writes
-  data/chunks/ab/cd/<chunk_id>
+  ab/<chunk_id>        chunk bytes, ab is the first two characters of the id
+  ab/<chunk_id>.sha256 checksum sidecar
 ```
 
-A write goes to `tmp/`, is written, fsynced, renamed into place, and then the parent directory is fsynced. Without the last step a crash can lose the directory entry while the manifest survives. The two-level directory fan-out comes from the first bytes of the id. `tmp/` is emptied at startup, since anything left there is a write that never finished.
+A write goes to `tmp/`, is written, fsynced, renamed into place, and then the parent directory is fsynced. Without the last step a crash can lose the directory entry while the manifest survives. The fan-out directory comes from the first two characters of the id. `tmp/` is emptied at startup, since anything left there is a write that never finished.
 
-**v0.6: extents.** Append-only extent files of 1 GiB. An index maps `chunk_id -> (extent, offset, len, crc)` and lives in RocksDB. Compaction reclaims holes left by deletes, and a scrub pass re-reads data and checks crcs. This is the S3 and Haystack style. The v0.6 milestone benchmarks it against the file-per-chunk layout.
+**Planned, v0.6: extents.** Append-only extent files of 1 GiB. An index maps `chunk_id -> (extent, offset, len, crc)` and lives in RocksDB. Compaction reclaims holes left by deletes, and a scrub pass re-reads data and checks crcs. This is the S3 and Haystack style. The v0.6 milestone benchmarks it against the file-per-chunk layout.
 
-**Platform differences** live in a `FileSystem` abstraction: `fsync` on Linux versus `fcntl(F_FULLFSYNC)` on macOS, and an optional Linux-only `O_DIRECT` and io_uring backend. On macOS `fsync` does not flush the drive cache, `F_FULLFSYNC` does, and SQLite only uses it when `PRAGMA fullfsync=ON` (off by default). `O_DIRECT` needs aligned buffers and fails on some filesystems (tmpfs, some overlayfs), so it stays optional. Docker Desktop on a Mac runs Linux in a VM, so containers never exercise `F_FULLFSYNC`. The macOS paths run only when a service is started natively (`make run`).
+**Platform differences.** Built: `fsync` on Linux versus `fcntl(F_FULLFSYNC)` on macOS, chosen in the disk store code. Planned, not built: a `FileSystem` abstraction and an optional Linux-only `O_DIRECT` and io_uring backend. On macOS `fsync` does not flush the drive cache, `F_FULLFSYNC` does, and SQLite only uses it when `PRAGMA fullfsync=ON` (off by default). `O_DIRECT` needs aligned buffers and fails on some filesystems (tmpfs, some overlayfs), so it stays optional. Docker Desktop on a Mac runs Linux in a VM, so containers never exercise `F_FULLFSYNC`. The macOS paths run only when a service is started natively (`make run`).
 
 ## 8. Configuration and limits
 
-Each service loads a config file and reloads it on change (SIGHUP or file watch). Limits and feature flags therefore change without a redeploy. A `flags` block in the same file holds feature flags. A config service and OpenFeature with flagd are deferred, see [ADR 0005](../adr/0005-file-reload-config-before-config-service.md).
+FrontdoorService loads `config/frontdoor.yaml` at start. Planned, not built: reload on change (SIGHUP or file watch) and a `flags` block for feature flags, so limits would change without a redeploy. The C++ services read environment variables. A config service and OpenFeature with flagd are deferred, see [ADR 0005](../adr/0005-file-reload-config-before-config-service.md).
 
 ```yaml
 limits:
@@ -263,23 +282,25 @@ flags: {}
 
 Safe to change later: anything recorded per object in the manifest (`chunk_bytes`, `inline_threshold_bytes`) and `max_object_bytes` upward. Not safe: `max_key_bytes` downward, since existing keys may be longer.
 
-Quotas are per-tenant defaults with overrides (buckets per tenant, bytes per bucket, requests/s). They are stored in BucketRegistry, enforced at admission from a cached snapshot, and exposed at `GET /v1/quotas`. Milestone v0.3.
+Planned, not built (v0.3): quotas as per-tenant defaults with overrides (buckets per tenant, bytes per bucket, requests/s). They would be stored in the bucket registry, enforced at admission from a cached snapshot, and exposed at `GET /v1/quotas`.
 
 Errors use RFC 9457 Problem Details with a `request_id` extension. Responses carry `Server: ts2-frontdoor/<version>` and `x-ts2-request-id`.
 
 Other behavior at the edge:
 
-- **Full disk.** A ChunkStoreService node stops accepting writes above a usage threshold (default 95%) and answers with an error that FrontdoorService maps to 507. It chooses another node when placement allows it. The disk-used alarm fires earlier, at 85%.
+- **Full disk.** Built: a ChunkStoreService node refuses a put when free space is below the chunk size, and FrontdoorService maps that error to 507. Planned, not built: a usage threshold (default 95%), choosing another node, and a disk-used alarm at 85%.
 - **Shutdown.** On SIGTERM a service stops accepting new requests, finishes in-flight ones for up to a drain timeout, then exits.
-- **Timeouts.** FrontdoorService sets a header-read timeout, an idle timeout and a minimum upload rate, so slow clients cannot hold connections forever. Exact values are set when admission is built.
-- **TLS.** Terminated at the load balancer (section 10). Services speak plain HTTP and gRPC inside the deployment.
-- **ChunkStoreService access.** Until the per-request token arrives in v0.2, the compose ports are bound to the compose network only and are never published to the host.
+- **Timeouts.** Built: a PUT timeout (`TS2_PUT_TIMEOUT_SECS`) and per-call deadlines to the C++ services. Planned, not built: a header-read timeout, an idle timeout and a minimum upload rate.
+- **TLS.** Planned: terminated at a load balancer (section 10). Today services speak plain HTTP and gRPC and there is no load balancer.
+- **ChunkStoreService access.** The per-request token is planned for v0.2. The check exists in ChunkStoreService but is off by default, and FrontdoorService does not send a token yet. The compose ports are bound to the compose network only and are never published to the host.
 
 ## 9. Observability
 
-OpenTelemetry (OTel) SDK in every service, sending to an OTel Collector. The Collector forwards metrics to VictoriaMetrics and logs to VictoriaLogs. Both accept OTLP over HTTP only, not gRPC, so the Collector uses the `otlphttp` exporter with a per-signal path for each. Grafana reads both, with dashboards provisioned from the repo. This mirrors the public description of Roblox's pipeline (OTel SDK and Collector, a Kafka buffer, Logstash and Elastic for logs, VictoriaMetrics, Grafana), minus Kafka and with VictoriaLogs instead of Elastic to stay light. The OTel metrics and logs SDKs for Rust and C++ are younger than Go's, so expect rough edges there.
+Built: the OpenTelemetry (OTel) SDK in FrontdoorService, sending to an OTel Collector. Planned: the same in the C++ services. The Collector forwards metrics to VictoriaMetrics and logs to VictoriaLogs. Both accept OTLP over HTTP only, not gRPC, so the Collector uses the `otlphttp` exporter with a per-signal path for each. Grafana reads both, with dashboards provisioned from the repo. This mirrors the public description of Roblox's pipeline (OTel SDK and Collector, a Kafka buffer, Logstash and Elastic for logs, VictoriaMetrics, Grafana), minus Kafka and with VictoriaLogs instead of Elastic to stay light. The OTel metrics and logs SDKs for Rust and C++ are younger than Go's, so expect rough edges there.
 
-Traces come later, with Tempo or VictoriaTraces. Until then every request is still followable across services: `x-ts2-request-id` is logged by every service and passed on as gRPC metadata.
+The table below is the target. Only the FrontdoorService request metrics exist. No alert rules are built, and the C++ and cell rows are planned.
+
+Traces come later, with Tempo or VictoriaTraces. Planned, not built: `x-ts2-request-id` logged by every service and passed on as gRPC metadata. Today only FrontdoorService logs it.
 
 | Scope | Metrics | Alarms |
 |---|---|---|
@@ -288,26 +309,26 @@ Traces come later, with Tempo or VictoriaTraces. Until then every request is sti
 | ChunkStoreService | disk used %, chunk read and write latency, fsync latency, IO errors, scrub failures, under-replicated chunks, repair backlog | disk above 85%; any IO error; under-replicated above 0 for 10 min; scrub failure above 0 |
 | Cell | SLO burn rate, fast (1 h) and slow (6 h) | burn-rate alerts on both windows |
 
-RocksDB metrics apply from v0.3. Under-replicated and repair metrics apply from v0.4.
+RocksDB metrics would apply from v0.3. Under-replicated and repair metrics would apply from v0.4.
 
 ## 10. Deployment
 
 Local first. `make` is the only entry point: `build`, `test`, `run`, `up`, `down`, `chaos`, each dispatching to the components.
 
 - **Native:** `make run` starts FrontdoorService on macOS or Linux with local data under `./data`.
-- **Compose:** FrontdoorService (BucketRegistry in-process until v0.4), later 2 cells each with an ObjectIndexService and 3 ChunkStoreService nodes. Named volume per node. `--profile obs` adds the observability stack. Containers are linux/arm64.
-- **Later, k3d and Helm:** ChunkStoreService nodes as a StatefulSet.
-- **Later, AWS via CDK on Graviton:** first one EC2 instance running compose, then 3 nodes on k3s, one per AZ.
+- **Compose (built):** FrontdoorService, one ObjectIndexService and four ChunkStoreService nodes, with a named volume per node. `--profile obs` adds the observability stack. Containers are linux/arm64. Planned for v0.4: two cells.
+- **Planned, not built, k3d and Helm:** ChunkStoreService nodes as a StatefulSet.
+- **Planned, not built, AWS via CDK on Graviton:** first one EC2 instance running compose, then 3 nodes on k3s, one per AZ.
 
-**Load balancer.** Every real deployment is DNS, then a load balancer, then the FrontdoorService fleet. Compose has none (Traefik is optional for local TLS). k3d uses an Ingress. On AWS start with an ALB (application load balancer): it terminates TLS, runs HTTP health checks and routes by path, for example to the UI. Move to an NLB (network load balancer) when raw throughput matters, since it works at layer 4 and does no HTTP parsing.
+**Load balancer (planned, not built).** Every real deployment is DNS, then a load balancer, then the FrontdoorService fleet. Compose has none (Traefik is optional for local TLS). k3d uses an Ingress. On AWS start with an ALB (application load balancer): it terminates TLS, runs HTTP health checks and routes by path, for example to the UI. Move to an NLB (network load balancer) when raw throughput matters, since it works at layer 4 and does no HTTP parsing.
 
-Container images are linux/arm64, cross-built with buildx from the Mac. Artifacts come from GitHub Actions and GHCR, or ECR, through a script that switches on `ARTIFACT_SOURCE=local|github|aws`.
+Container images are linux/arm64. Planned, not built: cross-building with buildx, publishing to GHCR or ECR, and a script that switches on `ARTIFACT_SOURCE=local|github|aws`.
 
-Repo layout (monorepo, one component per commit so each is testable alone): `Makefile`, `docs/`, `proto/`, `frontdoor/`, `ts2-core/`, `bucket-registry/` (v0.4), `cli/`, `object-index/`, `chunk-store/`, `ui/`, `deploy/compose/`, `deploy/cdk/`, `tests/e2e/`.
+Repo layout (monorepo, one component per commit so each is testable alone). Exists: `Makefile`, `docs/`, `proto/`, `frontdoor/`, `ts2-core/`, `ts2-proto/`, `cli/`, `object-index/`, `chunk-store/`, `deploy/compose/`, `tests/e2e/`. Planned, not created: `bucket-registry/` (v0.4), `ui/`, `deploy/cdk/`.
 
 ## 11. Per-component design docs
 
-To be written:
+To be written (none exist yet):
 
 - 001, FrontdoorService: admission, load shedding, routing, streaming and chunking.
 - 002, BucketRegistryService: tenants, buckets, quotas, bucket-to-cell map, cell health, jobs API.
@@ -321,16 +342,18 @@ To be written:
 
 ### Decisions
 
-- **Orphan chunk GC.** Owned by FrontdoorService (the only process that knows both the chunk nodes and the index) and diff-based, as a background task. Order matters: it lists the chunks on a ChunkStoreService node first, then pages through `ObjectIndexService.ListChunkRefs`, and deletes only chunks that are unreferenced and older than the minimum age. The reverse order could delete the chunk of an upload that commits between the two lists. It never deletes a chunk younger than `gc_min_chunk_age` (default 24 h), because a chunk of an in-flight PUT looks like an orphan until its manifest commits. Nothing returns a chunk list on DELETE.
-- **Index durability.** ObjectIndexService is a single process with one database per cell and no replica from v0.1 to v0.4. Replication and erasure coding protect chunks, not manifests, so losing the index loses every object in the cell. Mitigation: periodic backups of the database (SQLite online backup, later RocksDB checkpoints) to a separate volume, plus a restore drill.
+- **Orphan chunk GC.** Owned by FrontdoorService (the only process that knows both the chunk nodes and the index) and diff-based, as a background task. Order matters: it lists the chunks on a ChunkStoreService node first, then pages through `ObjectIndexService.ListChunkRefs`, and deletes only chunks that are unreferenced and older than the minimum age. The reverse order could delete the chunk of an upload that commits between the two lists. It never deletes a chunk younger than the minimum age (`TS2_GC_MIN_AGE_SECS`, default 1 hour), because a chunk of an in-flight PUT looks like an orphan until its manifest commits. Nothing returns a chunk list on DELETE.
+- **Index durability.** ObjectIndexService is a single process with one database per cell and no replica from v0.1 to v0.4. Replication and erasure coding protect chunks, not manifests, so losing the index loses every object in the cell. Planned, not built: periodic backups of the database (SQLite online backup, later RocksDB checkpoints) to a separate volume, plus a restore drill.
 - **Overwrite.** A second PUT replaces the manifest and increments `version`. The old chunks become orphans for GC. No user-visible object versioning in v0.
-- **ETag.** Hex SHA-256 of the whole object, computed by FrontdoorService from the stream. From v0.2 a client may send `x-ts2-checksum-sha256`, and a mismatch returns 400.
-- **Quota counters.** Global, in BucketRegistry, for v0.
+- **ETag.** Hex SHA-256 of the whole object, computed by FrontdoorService from the stream. Planned, not built (v0.2): a client may send `x-ts2-checksum-sha256`, and a mismatch returns 400.
+The next four decisions are for the planned bucket registry and are not built.
+
+- **Quota counters.** Global, in the bucket registry, for v0.
 - **Registry changes reach FrontdoorService** by polling every few seconds. Push may come later.
 - **Admin writes** (create bucket, set quota) are synchronous and return 201 or 204. Each is one database row.
-- **Long-running workflows** (bulk bucket delete, tenant moves, rebalance, repair, tiering, key and cert rotation) use a jobs API: the request returns 202 with `Location: /v1/jobs/{id}`. A job row in the registry database is the queue, and each step is idempotent and resumable. This first appears in v0.4. Temporal is a possible later engine for these jobs and is explicitly deferred.
+- **Long-running workflows** (bulk bucket delete, tenant moves, rebalance, repair, tiering, key and cert rotation) use a jobs API (planned, v0.4): the request returns 202 with `Location: /v1/jobs/{id}`. A job row in the registry database is the queue, and each step is idempotent and resumable. This first appears in v0.4. Temporal is a possible later engine for these jobs and is explicitly deferred.
 - **Idempotency.** Every API is idempotent or carries an idempotency key. FrontdoorService never acknowledges a write it has not seen committed downstream.
-- **Chunk token.** From v0.2 ChunkStoreService requires a per-request token minted by FrontdoorService. See [ADR 0006](../adr/0006-object-bytes-through-frontdoor.md).
+- **Chunk token.** Planned (v0.2), not built: ChunkStoreService requires a per-request token minted by FrontdoorService. See [ADR 0006](../adr/0006-object-bytes-through-frontdoor.md).
 - **Two index implementations.** The SQLite `ObjectIndex` in `ts2-core` and the C++ ObjectIndexService have separate schemas. The rewrite is accepted: the Rust one is the v0.1 stand-in and is kept for tests and single-binary runs.
 
 ### Open questions

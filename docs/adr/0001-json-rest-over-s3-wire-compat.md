@@ -1,6 +1,6 @@
 # ADR 0001: JSON REST API instead of S3 wire compatibility
 
-Status: accepted
+Status: accepted, built
 
 ## Context
 
@@ -9,6 +9,8 @@ TS2 needs an external API. S3 compatibility would let existing SDKs and tools wo
 ## Decision
 
 The external API is JSON over HTTP, versioned in the path (`/v1/...`), described by OpenAPI 3.1, generated from code: FrontdoorService uses utoipa 5.x (utoipa 4 emits OpenAPI 3.0) on annotated axum handlers, serves the spec at `/openapi.json` and a Scalar UI at `/docs`, and a test writes it to `docs/api/openapi.yaml`. Errors use RFC 9457 Problem Details with a `request_id` extension. List uses GET with query parameters. The IETF HTTP QUERY method is parked until it is an RFC. An S3 adapter may be added later as a separate component.
+
+**Today:** built. The API is served at `/v1`, the OpenAPI spec is generated and checked in, and errors are RFC 9457. The CLI does not use a generated client. It calls the API with plain `httpx`.
 
 ## Consequences
 

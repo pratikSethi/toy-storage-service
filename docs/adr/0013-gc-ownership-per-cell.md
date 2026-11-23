@@ -1,6 +1,6 @@
 # ADR 0013: GC ownership per cell
 
-Status: accepted
+Status: accepted, partly built
 
 ## Context
 
@@ -9,6 +9,8 @@ Orphan chunks come from overwrites, failed PUTs and replica stragglers ([ADR 001
 ## Decision
 
 Each cell's sweep runs in FrontdoorService, against that cell's ObjectIndexService and that cell's nodes. There is one sweeper per cell. The sweep lists chunks the index references, lists chunks on the nodes, and deletes the difference once it is older than the minimum age.
+
+**Today:** built for the one cell: FrontdoorService runs the sweep in remote mode, against that cell's ObjectIndexService and nodes. Not built: more than one cell, and the rule that only one FrontdoorService instance runs the sweep.
 
 ## Consequences
 

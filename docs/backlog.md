@@ -1,6 +1,6 @@
 # Backlog
 
-Features by milestone, taken from the [PRD](prd.md). Order inside a milestone is not fixed.
+Features by milestone, taken from the [PRD](prd.md). Order inside a milestone is not fixed. Items marked **Built** exist. All other items are planned and not built.
 
 ## v0.1
 
@@ -9,14 +9,14 @@ Features by milestone, taken from the [PRD](prd.md). Order inside a milestone is
 - OpenAPI from utoipa, Scalar UI, RFC 9457 errors, request ids, JSON logs.
 - `ts2` CLI (Python), docker compose.
 - Observability profile: OTel Collector, VictoriaMetrics, VictoriaLogs, Grafana with one FrontdoorService dashboard.
-- ObjectIndex backup job (SQLite online backup).
+- ObjectIndex backup job (SQLite online backup). Not built.
 
 ## v0.2
 
-- C++ ChunkStoreService and ObjectIndexService replace the in-process modules.
-- Placement rule in `ts2-core` (`hash(chunk_id) mod N`), 3 ChunkStoreService nodes. Single copy, no replication yet.
-- NodeInfo id check at FrontdoorService startup ([ADR 0012](adr/0012-node-ids-are-permanent.md)).
-- Orphan chunk GC (diff-based, minimum chunk age).
+- **Built:** C++ ChunkStoreService and ObjectIndexService replace the in-process modules.
+- **Built:** placement in `ts2-core` by rendezvous hashing, four ChunkStoreService nodes. Single copy, no replication yet.
+- **Built:** NodeInfo id check at FrontdoorService startup ([ADR 0012](adr/0012-node-ids-are-permanent.md)).
+- **Built:** orphan chunk cleanup (garbage collection, GC: delete chunks no manifest points to, once older than a minimum age).
 - End-to-end client checksum: the client sends a sha256 of the whole object (and of each part, once multipart exists) in `x-ts2-checksum-sha256`. FrontdoorService verifies it before committing the manifest and rejects a mismatch with 400. Today frontdoor computes the ETag from the bytes it received, which cannot catch corruption that happened before frontdoor.
 - Static API key auth. Its own item, separate from placement and replication.
 - Config reload without redeploy.

@@ -1,6 +1,6 @@
 # ADR 0007: Multi-word service names
 
-Status: accepted
+Status: accepted, built
 
 ## Context
 
@@ -20,6 +20,8 @@ Each service has a multi-word name that ends in `Service`, and every diagram and
 Until v0.4 bucket registry logic is an in-process module of FrontdoorService called `BucketRegistry`. `ts2-core` is a Rust library, not a service. It holds the `ObjectIndex` and `ChunkStore` traits that FrontdoorService calls in process in v0.1 and over gRPC later. The trait names stay short because they are code, not services.
 
 "ShardStore" is not used. It is the name of S3's own storage node software.
+
+**Today:** BucketRegistryService and the in-process `BucketRegistry` module do not exist. The table row for it describes a planned service.
 
 ## Consequences
 
