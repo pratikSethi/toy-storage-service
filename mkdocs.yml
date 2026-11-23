@@ -69,6 +69,7 @@ nav:
       - Service levels: engineering/service-levels.md
       - Operations: engineering/operations.md
       - Debugging: engineering/debugging.md
+      - Frontdoor stack: engineering/frontdoor-stack.md
       - System overview: design/000-system-overview.md
       - PRD: prd.md
       - ADRs:
