@@ -134,6 +134,8 @@ services:
     profiles: [obs]
     image: victoriametrics/victoria-logs:v1.54.0
     command: ["-storageDataPath=/vlogs", "-retentionPeriod=7d"]
+    ports:
+      - "127.0.0.1:9428:9428"
     volumes:
       - vl-data:/vlogs
 

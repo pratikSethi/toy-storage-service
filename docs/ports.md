@@ -12,7 +12,7 @@ Every port TS2 uses, in one place. **Rule: a new port goes in this table in the 
 | 3000 | Grafana | `make up-obs` | host, `127.0.0.1` | `deploy/compose/compose.yaml` |
 | 4318 | OpenTelemetry Collector, OTLP over HTTP | `make up-obs` | container only | `deploy/compose/otel/collector.yaml`, `Makefile` |
 | 8428 | VictoriaMetrics (image default, not set in the repo) | `make up-obs` | container only | `deploy/compose/otel/collector.yaml` |
-| 9428 | VictoriaLogs (image default, not set in the repo) | `make up-obs` | container only | `deploy/compose/otel/collector.yaml` |
+| 9428 | VictoriaLogs, web UI at `/select/vmui` (image default port) | `make up-obs` | host, `127.0.0.1` | `deploy/compose/compose.yaml` |
 | 50051 | ChunkStoreService gRPC (default of the binary; compose overrides it per node, see the rows below) | built binary | host `127.0.0.1` | `chunk-store/src/main.cpp` |
 | 50052 | ObjectIndexService gRPC | built binary, or its container | host `127.0.0.1` when run directly, container only in Docker | `object-index/src/main.cpp`, `object-index/Dockerfile` |
 | 50151 | ChunkStoreService for `make e2e-native`, temp data dir | `make e2e-native` | host, `127.0.0.1`, while the test runs | `Makefile` |
@@ -24,7 +24,7 @@ Every port TS2 uses, in one place. **Rule: a new port goes in this table in the 
 | 50064 | ChunkStoreService `node-4` in compose (`chunk-store-4`) | `make up` | container only | `deploy/compose/compose.yaml` |
 | 50065-50069 | Reserved for ChunkStoreService nodes 5 to 9 | not used yet | n/a | this page |
 
-Compose publishes only FrontdoorService (9001) and Grafana (3000) to the host. The collector, VictoriaMetrics and VictoriaLogs talk to each other on the compose network.
+Compose publishes only FrontdoorService (9001), Grafana (3000) and the VictoriaLogs UI (9428) to the host. The collector and VictoriaMetrics talk to each other on the compose network.
 
 The two C++ services read `TS2_LISTEN`, so their ports can be overridden. The values above are the defaults.
 
