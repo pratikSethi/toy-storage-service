@@ -2,6 +2,14 @@
 
 Start FrontdoorService in one terminal. It listens on `127.0.0.1:9000` and keeps data under `./data`.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **ETag**: a fingerprint of an object's bytes (the SHA-256 hash in hex). Two objects with the same ETag have the same content.
+> - **inline object**: an object under 64 KiB. It is stored inside its manifest instead of as chunks.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+
 ```sh
 make run
 ```

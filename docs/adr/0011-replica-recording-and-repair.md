@@ -2,6 +2,19 @@
 
 Status: accepted, partly built
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **orphan chunk**: a chunk on a node that no manifest points to. A failed upload, an overwrite or a delete can leave one.
+> - **garbage collection (GC)**: the background job that deletes orphan chunks once they are older than a minimum age.
+> - **R**: the number of copies of each chunk. R=3 means three copies. Only R=1 (one copy) is built.
+> - **W**: how many of the R copies must be durable before a PUT is answered with 201. W=2 of R=3 means two of three.
+> - **rendezvous hashing**: a way to pick nodes for a chunk. Every node gets a score for the chunk id and the highest scores win, so when a node leaves, only its chunks move.
+> - **compare-and-swap (CAS)**: write only if the stored version is still the one you read, otherwise fail and retry.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## Context
 
 With W=2 of R=3 ([ADR 0010](0010-replication-and-the-meaning-of-201.md)), the third write may finish after the ack, or never. The manifest has to say which replicas count, and repair has to change manifests without racing a concurrent overwrite.

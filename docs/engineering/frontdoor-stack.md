@@ -2,6 +2,11 @@
 
 A reference for reading `frontdoor/` when you know Spring Boot or FastAPI. Crate versions are from `frontdoor/Cargo.toml`, `ts2-core/Cargo.toml` and `Cargo.lock`.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **SQLite**: a small database that lives in one file.
+
 ## The pieces
 
 | Role | FastAPI | Spring Boot | Frontdoor (Rust) |

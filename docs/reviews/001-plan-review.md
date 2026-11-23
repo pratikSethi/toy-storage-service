@@ -2,6 +2,22 @@
 
 Read-only review of README, PRD, plan, backlog, overview and ADRs 0001-0006. Checked from knowledge, no web lookups. Paths are relative to the repo root.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **ETag**: a fingerprint of an object's bytes (the SHA-256 hash in hex). Two objects with the same ETag have the same content.
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **orphan chunk**: a chunk on a node that no manifest points to. A failed upload, an overwrite or a delete can leave one.
+> - **garbage collection (GC)**: the background job that deletes orphan chunks once they are older than a minimum age.
+> - **R**: the number of copies of each chunk. R=3 means three copies. Only R=1 (one copy) is built.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **OTel** (OpenTelemetry): a standard way to emit metrics, logs and traces.
+> - **OTLP** (OpenTelemetry protocol): the wire format OTel data is sent in.
+> - **fsync**: a system call that forces written data onto the disk before it returns, so a crash cannot lose it.
+> - **SQLite**: a small database that lives in one file.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## 1. Inconsistencies
 
 - Who picks the node for a chunk? `docs/design/000-system-overview.md:116-117` has frontdoor ask the index to "place chunks". `:80` and `docs/adr/0006-...:16` put placement in `ts2-core` (frontdoor), and `:128` says `hash(chunk_id) mod N`, which needs no index. Pick one.

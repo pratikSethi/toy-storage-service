@@ -1,6 +1,19 @@
-# ADR 0010: Replication R and W, and what 201 means
+# ADR 0010: Copies per chunk, and what a 201 reply means
 
 Status: accepted, not built yet
+
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **failure domain**: a set of things that fail together, such as one disk, one host or one rack.
+> - **R**: the number of copies of each chunk. R=3 means three copies. Only R=1 (one copy) is built.
+> - **W**: how many of the R copies must be durable before a PUT is answered with 201. W=2 of R=3 means two of three.
+> - **quorum**: the smallest number of copies that must be written, or agree, for an operation to count.
+> - **fsync**: a system call that forces written data onto the disk before it returns, so a crash cannot lose it.
+> - **SLO** (service level objective): a target for a measurement over a period, for example 99.9% of requests succeed in a month.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
 
 ## Context
 

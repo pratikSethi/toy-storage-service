@@ -2,6 +2,14 @@
 
 Status: accepted, partly built
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **failure domain**: a set of things that fail together, such as one disk, one host or one rack.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## Context
 
 [ADR 0004](0004-cells-for-the-data-plane-thin-global-layer.md) chose cells for the data plane but left open what is inside one. Without that, nobody can say what a failure is allowed to take down, and the per-cell availability numbers in [service levels](../engineering/service-levels.md) have no meaning.

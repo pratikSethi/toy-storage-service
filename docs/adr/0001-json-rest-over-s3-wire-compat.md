@@ -2,6 +2,11 @@
 
 Status: accepted, built
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## Context
 
 TS2 needs an external API. S3 compatibility would let existing SDKs and tools work, but it means XML bodies, SigV4 request signing, and many quirks (virtual-host addressing, error codes, listing formats). That is a large amount of work that teaches little about storage internals.

@@ -2,6 +2,14 @@
 
 Status: accepted. The Rust, C++ and Python parts are built. The Go and TypeScript parts are not built.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **fsync**: a system call that forces written data onto the disk before it returns, so a crash cannot lose it.
+> - **SQLite**: a small database that lives in one file.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## Context
 
 TS2 has three kinds of code: a request-heavy edge that streams bytes, a bucket registry (buckets, tenants, quotas, bucket-to-cell map) that is mostly CRUD and background reconciliation, and a data plane that does disk I/O and owns on-disk formats. The builder also wants to learn each language in a setting that suits it.

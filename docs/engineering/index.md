@@ -2,6 +2,18 @@
 
 How TS2 works inside. This section is for engineers, PMs and anyone learning how an object store is built. If you only want to use TS2, start with the [customer guide](../guide/overview.md).
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **ETag**: a fingerprint of an object's bytes (the SHA-256 hash in hex). Two objects with the same ETag have the same content.
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **orphan chunk**: a chunk on a node that no manifest points to. A failed upload, an overwrite or a delete can leave one.
+> - **R**: the number of copies of each chunk. R=3 means three copies. Only R=1 (one copy) is built.
+> - **rendezvous hashing**: a way to pick nodes for a chunk. Every node gets a score for the chunk id and the highest scores win, so when a node leaves, only its chunks move.
+> - **OTel** (OpenTelemetry): a standard way to emit metrics, logs and traces.
+> - **OTLP** (OpenTelemetry protocol): the wire format OTel data is sent in.
+> - **SQLite**: a small database that lives in one file.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 Pages: [components](components.md), [operations](operations.md), [system overview](../design/000-system-overview.md), [PRD](../prd.md), [ADRs](../adr/0001-json-rest-over-s3-wire-compat.md), [plan](../plan.md), [backlog](../backlog.md), [setup](../setup.md), [demo](../demo.md) and the [port registry](../ports.md).
 
 ## Three words you need

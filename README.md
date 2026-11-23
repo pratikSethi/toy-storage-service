@@ -4,7 +4,7 @@ TS2 (Toy Storage Service) is an S3-like object store that you can run on a lapto
 
 Under the API, big files are cut into 4 MiB pieces that are stored on separate nodes, and a small database remembers which pieces make up which file. It also has limits, error contracts, metrics and dashboards, because that is where storage lessons come from. Failure drills are planned, not built.
 
-**Status:** Built today: FrontdoorService, ObjectIndexService and four ChunkStoreService nodes, run in one process (`make run`) or in docker compose (`make up`). There is one cell, one copy of each chunk and one index, so it is not durable. Replication, more cells, auth and the Go service are planned. See [what is built](docs/plan.md).
+**Status:** Built today: FrontdoorService, ObjectIndexService and four ChunkStoreService nodes, run in one process (`make run`) or in docker compose (`make up`). There is one cell (one ObjectIndexService plus its ChunkStoreService nodes), one copy of each chunk (a 4 MiB piece of an object, defined below) and one index, so it is not durable. Replication, more cells, auth and the Go service are planned. See [what is built](docs/plan.md).
 
 ## Three words you need
 
@@ -12,7 +12,7 @@ Under the API, big files are cut into 4 MiB pieces that are stored on separate n
 
 **Chunk.** Objects bigger than 64 KiB are cut into pieces of 4 MiB, called chunks. Each chunk gets a random id and is stored on one ChunkStoreService node. A 9 MiB photo becomes three chunks: 4 MiB, 4 MiB and 1 MiB.
 
-**Manifest.** The manifest is the small record kept for each object. It holds the size, ETag, content type, version, and the ordered list of chunk ids with the node that holds each one. Objects under 64 KiB skip chunking and sit inside the manifest itself (`inline_data`). To read an object, you look up its manifest, then fetch its chunks in order. Here is the manifest for `photos/cats/cat.jpg`, a 9 MiB file (hashes shortened):
+**Manifest.** The manifest is the small record kept for each object. It holds the size, the ETag (a fingerprint of the object's bytes: their SHA-256 hash in hex), the content type, the version, and the ordered list of chunk ids with the node that holds each one. Objects under 64 KiB skip chunking and sit inside the manifest itself (`inline_data`). To read an object, you look up its manifest, then fetch its chunks in order. Here is the manifest for `photos/cats/cat.jpg`, a 9 MiB file (hashes shortened):
 
 ```json
 {
@@ -58,7 +58,7 @@ flowchart LR
 - A **cell** is one ObjectIndexService plus its ChunkStoreService nodes. There is one cell today. More cells (planned, v0.4) would mean more capacity, and a fault would stay inside one cell. Buckets are stored by ObjectIndexService, as there is no separate bucket service yet.
 - The **`ts2` CLI** (Python) and the end-to-end tests call the REST API.
 
-`make run` starts FrontdoorService alone. It then uses a SQLite file as the index and a local directory as the chunk store, inside its own process, through the `ts2-core` library. `make up` starts it with the C++ services instead, and FrontdoorService talks to them over gRPC. Both modes implement the same two Rust traits.
+`make run` starts FrontdoorService alone. It then uses a SQLite file (a small database in one file) as the index and a local directory as the chunk store, inside its own process, through the `ts2-core` library. `make up` starts it with the C++ services instead, and FrontdoorService talks to them over gRPC (a way for services to call each other over the network, using Protobuf messages). Both modes implement the same two Rust traits.
 
 ## What it is not
 
@@ -81,7 +81,7 @@ Tools to install first are listed in [docs/setup.md](docs/setup.md). Then follow
 
 **What runs today?** FrontdoorService with either in-process backends (`make run`) or the C++ ObjectIndexService and four ChunkStoreService nodes (`make up`). PUT, GET, DELETE and list, a CLI, a docker compose setup and an optional observability stack.
 
-**Why so many languages?** Each layer gets the language that fits: Rust for FrontdoorService, C++ for the data plane, Python for the CLI and tests. Go is planned for a BucketRegistryService that is not built. See [ADR 0002](docs/adr/0002-rust-frontdoor-go-bucket-registry-cpp-data-plane.md).
+**Why so many languages?** (Each design decision is written down in an ADR, an architecture decision record: a short note on what was decided and why.) Each layer gets the language that fits: Rust for FrontdoorService, C++ for the data plane, Python for the CLI and tests. Go is planned for a BucketRegistryService that is not built. See [ADR 0002](docs/adr/0002-rust-frontdoor-go-bucket-registry-cpp-data-plane.md).
 
 ## Repo layout
 

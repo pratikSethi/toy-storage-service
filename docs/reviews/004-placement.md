@@ -2,6 +2,14 @@
 
 ## What changed
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **R**: the number of copies of each chunk. R=3 means three copies. Only R=1 (one copy) is built.
+> - **rendezvous hashing**: a way to pick nodes for a chunk. Every node gets a score for the chunk id and the highest scores win, so when a node leaves, only its chunks move.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+
 - **Placement** (`ts2-core/src/placement.rs`). Rendezvous hashing: each placeable node scores `sha256(node_id ":" chunk_id)` and the chunk goes to the highest score. `rendezvous(chunk_id, nodes, r)` returns an ordered list of up to `r` nodes. `put_object` uses `r = 1`. Unhealthy nodes are skipped because `ChunkStore::nodes()` already lists only placeable ones. Node ids still come from `TS2_CHUNK_NODES` (`id=addr,...`, format unchanged). Existing manifests record their node, so reads are unaffected; only new chunks use the new function.
 - **Docker** (both C++ Dockerfiles). The vcpkg install step uses `--mount=type=cache,target=/root/.cache/vcpkg`. The two Dockerfiles are identical up to that step, so the second image reuses the first one's layer. Chosen over a shared base image because it needs no extra image and no build ordering. `make up` and `make up-obs` now build the images one after another (`make images`). Explained in `docs/setup.md`.
 - **Compose**: `chunk-store-1` to `chunk-store-4`, ids `node-1` to `node-4`, ports 50061 to 50064 (container only), volumes `chunk-data-1` to `-4`, one shared image `ts2-chunk-store`. The old `chunk-data` volume is no longer used.

@@ -2,6 +2,10 @@
 
 Command line client for [FrontdoorService](../frontdoor/README.md). Python, typer and httpx.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **ETag**: a fingerprint of an object's bytes (the SHA-256 hash in hex). Two objects with the same ETag have the same content.
+
 ## Install
 
 ```sh

@@ -2,6 +2,12 @@
 
 What to install to build, test and run TS2, and why. macOS first, Ubuntu/Debian second. Versions are what the author's Mac (Apple Silicon) had when this page was written; nothing here pins them.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **SQLite**: a small database that lives in one file.
+
 ## What needs what
 
 | You want to | You need |

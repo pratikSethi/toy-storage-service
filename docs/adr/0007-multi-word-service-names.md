@@ -2,6 +2,12 @@
 
 Status: accepted, built
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## Context
 
 Early docs used one-word names: gateway, registry, index, chunkstore. Words like "index" and "registry" are also ordinary nouns (a database index, a container registry), so a sentence such as "the index stores it" was ambiguous. Diagrams also did not say what each box was written in.

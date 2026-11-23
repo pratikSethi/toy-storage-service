@@ -2,6 +2,11 @@
 
 `ts2` is the command line client for the [API](../api/index.md). It is a small Python program (typer and httpx) in `cli/`. It has six commands: `mb`, `rb`, `ls`, `cp`, `rm` and `head`.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **ETag**: a fingerprint of an object's bytes (the SHA-256 hash in hex). Two objects with the same ETag have the same content.
+
 ## Install
 
 From the repo root:

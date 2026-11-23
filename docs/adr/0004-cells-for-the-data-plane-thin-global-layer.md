@@ -2,6 +2,13 @@
 
 Status: accepted, partly built
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## Context
 
 One big shared data plane means any bug or overload can affect every tenant, and the system's size is unbounded, so it is never fully tested at the size it runs at. Whatever sits above the data plane is shared by everyone, so its failures hurt the most.

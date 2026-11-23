@@ -2,6 +2,16 @@
 
 C++20 (gRPC, protobuf, spdlog, Catch2, built with CMake and vcpkg). The binary is `ts2-chunk-store`. It runs on each storage node.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **failure domain**: a set of things that fail together, such as one disk, one host or one rack.
+> - **orphan chunk**: a chunk on a node that no manifest points to. A failed upload, an overwrite or a delete can leave one.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **fsync**: a system call that forces written data onto the disk before it returns, so a crash cannot lose it.
+
 An object is cut into fixed-size chunks, and each chunk has a random id. ChunkStoreService is the process that keeps those chunks on one node's disk. FrontdoorService sends it chunks to store and asks for them back, in whole or by byte range. It knows nothing about objects, keys or buckets; that is the index's job.
 
 ## What it owns

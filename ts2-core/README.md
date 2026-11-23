@@ -2,6 +2,16 @@
 
 Rust library crate. It is not a service. FrontdoorService links it in.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **ETag**: a fingerprint of an object's bytes (the SHA-256 hash in hex). Two objects with the same ETag have the same content.
+> - **orphan chunk**: a chunk on a node that no manifest points to. A failed upload, an overwrite or a delete can leave one.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **fsync**: a system call that forces written data onto the disk before it returns, so a crash cannot lose it.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 An object store needs a few rules that have nothing to do with HTTP: how to cut an object into chunks, how to hash them, which node a chunk goes to, and how to put a manifest and its chunks together without ever leaving a manifest that points at missing data. `ts2-core` holds those rules, so they can be tested alone and reused by other clients later.
 
 ## What it owns

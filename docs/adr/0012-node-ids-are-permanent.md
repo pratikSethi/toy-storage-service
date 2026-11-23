@@ -2,6 +2,12 @@
 
 Status: accepted, built
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## Context
 
 Node ids are written into every manifest ([ADR 0011](0011-replica-recording-and-repair.md)). Today FrontdoorService takes the id from its own config and never checks it against what the node says it is. A mistyped address or a swapped data directory would send reads and writes to the wrong node without any error.

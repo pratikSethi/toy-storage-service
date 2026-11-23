@@ -2,6 +2,25 @@
 
 Features by milestone, taken from the [PRD](prd.md). Order inside a milestone is not fixed. Items marked **Built** exist. All other items are planned and not built.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **ETag**: a fingerprint of an object's bytes (the SHA-256 hash in hex). Two objects with the same ETag have the same content.
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **failure domain**: a set of things that fail together, such as one disk, one host or one rack.
+> - **orphan chunk**: a chunk on a node that no manifest points to. A failed upload, an overwrite or a delete can leave one.
+> - **garbage collection (GC)**: the background job that deletes orphan chunks once they are older than a minimum age.
+> - **R**: the number of copies of each chunk. R=3 means three copies. Only R=1 (one copy) is built.
+> - **W**: how many of the R copies must be durable before a PUT is answered with 201. W=2 of R=3 means two of three.
+> - **rendezvous hashing**: a way to pick nodes for a chunk. Every node gets a score for the chunk id and the highest scores win, so when a node leaves, only its chunks move.
+> - **compare-and-swap (CAS)**: write only if the stored version is still the one you read, otherwise fail and retry.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **OTel** (OpenTelemetry): a standard way to emit metrics, logs and traces.
+> - **SQLite**: a small database that lives in one file.
+> - **SLO** (service level objective): a target for a measurement over a period, for example 99.9% of requests succeed in a month.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## v0.1
 
 - FrontdoorService: health, bucket CRUD, object PUT/GET/HEAD/DELETE, list.

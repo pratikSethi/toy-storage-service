@@ -2,6 +2,15 @@
 
 This page sets up VS Code so you can start the whole stack under debuggers and step one `ts2 cp` upload from the CLI to the disk.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **ETag**: a fingerprint of an object's bytes (the SHA-256 hash in hex). Two objects with the same ETag have the same content.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **fsync**: a system call that forces written data onto the disk before it returns, so a crash cannot lose it.
+> - **SQLite**: a small database that lives in one file.
+
 ## What you need
 
 | Extension | Id | Used for |

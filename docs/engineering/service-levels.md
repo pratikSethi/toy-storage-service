@@ -2,6 +2,15 @@
 
 The internal view of the [customer service levels](../guide/service-levels.md). This page defines what each service level measures, what we run to, when we alert, and who looks at which number.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **SLI** (service level indicator): a measurement, such as the share of requests that succeed.
+> - **SLO** (service level objective): a target for a measurement over a period, for example 99.9% of requests succeed in a month.
+> - **p99**: the value that 99 of 100 requests beat. A p99 latency of 100 ms means 99 requests in 100 finish within 100 ms.
+
 !!! warning "Illustrative numbers"
     Every number marked with a superscript footnote is made up for the demo.[^illus] The burn-rate multipliers come from the Google SRE workbook. The request metrics exist today. The disk, repair and scrub metrics do not. This page describes the intended way of running TS2. No alert rules, on-call rota or review meetings exist, and neither does BucketRegistryService, so the control plane team below is planned.
 
@@ -27,7 +36,7 @@ All availability SLIs read `ts2_http_requests_total`, which carries the labels `
 
 ### 1. Durability
 
-Covered in [its own section](#durability-slis) below.
+Covered in [its own section](#durability-indicators) below.
 
 ### 2. Data availability, Tier 0
 
@@ -93,7 +102,7 @@ Spending it means real requests failed. A bad deploy that errors for two minutes
 
 Tier 1 has ten times the budget (43.2 minutes), because the calls are less critical.
 
-## Durability SLIs
+## Durability indicators
 
 11 nines cannot be measured. Losing one object in 10,000 years across 10 million objects never shows up in a month of data. So durability is **modelled**, and we watch **proxies**.
 

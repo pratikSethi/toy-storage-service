@@ -2,6 +2,20 @@
 
 Read-only review of commits `0f8703f^..HEAD` (proto, C++ scaffold, CI, operation label, dashboard, ports) against `docs/plan.md`, the overview, the ADRs and review 001. Paths are relative to the repo root. One check was run: `protoc` from `chunk-store/build/debug/vcpkg_installed` on both protos. Nothing was built, edited or committed.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **inline object**: an object under 64 KiB. It is stored inside its manifest instead of as chunks.
+> - **orphan chunk**: a chunk on a node that no manifest points to. A failed upload, an overwrite or a delete can leave one.
+> - **garbage collection (GC)**: the background job that deletes orphan chunks once they are older than a minimum age.
+> - **R**: the number of copies of each chunk. R=3 means three copies. Only R=1 (one copy) is built.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **fsync**: a system call that forces written data onto the disk before it returns, so a crash cannot lose it.
+> - **SQLite**: a small database that lives in one file.
+> - **p99**: the value that 99 of 100 requests beat. A p99 latency of 100 ms means 99 requests in 100 finish within 100 ms.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## Top 5 findings
 
 1. **The two protos cannot be compiled together.** `proto/ts2/v1/object_index.proto:118-125` redefines `NodeInfoRequest` and `NodeInfoResponse`, which already exist in package `ts2.v1` at `chunk_store.proto:107-117`. Running `protoc -I proto proto/ts2/v1/chunk_store.proto proto/ts2/v1/object_index.proto` fails with `"ts2.v1.NodeInfoRequest" is already defined in file "ts2/v1/chunk_store.proto"`. The C++ scaffold builds only because each CMake project compiles one proto. Item (c) (tonic, one `build.rs` or crate for both) fails on the first build. Fix before round 4 forks: rename to `ChunkStoreNodeInfo*` and `ObjectIndexNodeInfo*` (or move to a shared `node.proto`, which makes both services return the same message).

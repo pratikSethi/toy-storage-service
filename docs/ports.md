@@ -2,6 +2,13 @@
 
 Every port TS2 uses, in one place. **Rule: a new port goes in this table in the same commit that introduces it.**
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **OTel** (OpenTelemetry): a standard way to emit metrics, logs and traces.
+> - **OTLP** (OpenTelemetry protocol): the wire format OTel data is sent in.
+
 | Port | What | How started | Reachable from | Defined in |
 |---|---|---|---|---|
 | 9000 | FrontdoorService (the default for the CLI, curl examples and Scalar docs) | `make run` | host, `127.0.0.1` | `config/frontdoor.yaml` |

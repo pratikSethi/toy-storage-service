@@ -2,6 +2,10 @@
 
 Status: accepted for v0, not built
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## Context
 
 Limits (such as `max_object_bytes`) and feature flags need to change without redeploying, so a limit can be bumped live. A config service or a flag service (OpenFeature with flagd) would do this, but adds another system to build and run before the core exists.

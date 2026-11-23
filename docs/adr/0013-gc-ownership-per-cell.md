@@ -1,6 +1,16 @@
-# ADR 0013: GC ownership per cell
+# ADR 0013: Orphan chunk cleanup runs per cell
 
 Status: accepted, partly built
+
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **failure domain**: a set of things that fail together, such as one disk, one host or one rack.
+> - **orphan chunk**: a chunk on a node that no manifest points to. A failed upload, an overwrite or a delete can leave one.
+> - **garbage collection (GC)**: the background job that deletes orphan chunks once they are older than a minimum age.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
 
 ## Context
 

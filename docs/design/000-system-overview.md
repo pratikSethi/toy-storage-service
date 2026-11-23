@@ -6,6 +6,26 @@ This page describes the design and marks what is built. Anything labelled **Plan
 
 Glossary. The shape is front end, index, storage, like S3. **FrontdoorService** is the front end. **ObjectIndexService** is the index. **ChunkStoreService** is storage. **BucketRegistryService** (planned, not built) would hold buckets, tenants and quotas. A **cell** is a self-contained copy of one ObjectIndexService plus its ChunkStoreService nodes. Service names are multi-word on purpose, see [ADR 0007](../adr/0007-multi-word-service-names.md). Every diagram labels the language of each service.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **ETag**: a fingerprint of an object's bytes (the SHA-256 hash in hex). Two objects with the same ETag have the same content.
+> - **inline object**: an object under 64 KiB. It is stored inside its manifest instead of as chunks.
+> - **failure domain**: a set of things that fail together, such as one disk, one host or one rack.
+> - **orphan chunk**: a chunk on a node that no manifest points to. A failed upload, an overwrite or a delete can leave one.
+> - **garbage collection (GC)**: the background job that deletes orphan chunks once they are older than a minimum age.
+> - **R**: the number of copies of each chunk. R=3 means three copies. Only R=1 (one copy) is built.
+> - **rendezvous hashing**: a way to pick nodes for a chunk. Every node gets a score for the chunk id and the highest scores win, so when a node leaves, only its chunks move.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **OTel** (OpenTelemetry): a standard way to emit metrics, logs and traces.
+> - **OTLP** (OpenTelemetry protocol): the wire format OTel data is sent in.
+> - **fsync**: a system call that forces written data onto the disk before it returns, so a crash cannot lose it.
+> - **SQLite**: a small database that lives in one file.
+> - **SLO** (service level objective): a target for a measurement over a period, for example 99.9% of requests succeed in a month.
+> - **p99**: the value that 99 of 100 requests beat. A p99 latency of 100 ms means 99 requests in 100 finish within 100 ms.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## 1. Context
 
 TS2 (Toy Storage Service) is an S3-like object store built to learn storage internals. Clients talk JSON REST to FrontdoorService. Objects are split into chunks and stored on ChunkStoreService nodes. ObjectIndexService maps each key to a manifest that lists its chunks. Requirements are in the [PRD](../prd.md).

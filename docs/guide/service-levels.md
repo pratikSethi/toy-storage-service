@@ -3,6 +3,10 @@
 !!! warning "Illustrative numbers"
     TS2 is a learning project. Every number marked with a superscript footnote on this page is made up for the demo. They show what a real service level page contains. Nobody is paged at 3am for TS2, and nothing here is a commitment you can build a business on.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **p99**: the value that 99 of 100 requests beat. A p99 latency of 100 ms means 99 requests in 100 finish within 100 ms.
+
 ## Three terms
 
 - **SLI** (service level indicator): a measurement. Example: good PutObject requests divided by valid PutObject requests, in each 5-minute window.

@@ -2,6 +2,10 @@
 
 ## Bucket
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **ETag**: a fingerprint of an object's bytes (the SHA-256 hash in hex). Two objects with the same ETag have the same content.
+
 A bucket is a named container for objects. Names are 3 to 63 characters: lowercase letters, digits and hyphens. A bucket must be empty before you can delete it.
 
 **Location.** Every bucket lives in a single location today. Choosing a region (and later an availability zone) per bucket is planned, see the [backlog](../backlog.md). It is not part of the API yet.
@@ -18,7 +22,7 @@ Listing "everything under `reports/2026/`" is a **prefix listing**: you ask for 
 
 Keys cannot be empty or contain `..` segments.
 
-## ETag
+## ETag (content fingerprint)
 
 The ETag identifies the exact bytes of an object. It is the SHA-256 of the content, in hex. Two uploads of the same bytes have the same ETag, so you can compare it to check that a download matches what you uploaded.
 

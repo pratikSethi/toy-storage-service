@@ -2,6 +2,11 @@
 
 Status: accepted, not built yet
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## Context
 
 FrontdoorService has to know which cell owns a bucket ([ADR 0008](0008-what-a-cell-is.md)). The map could live in FrontdoorService config, in the first cell's index, or in the Go BucketRegistryService planned for v0.4. CreateBucket and ListBuckets behave differently depending on the choice.

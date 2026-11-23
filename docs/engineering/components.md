@@ -2,6 +2,16 @@
 
 One section per component. Terms used here, in short: a **bucket** and **key** name an object. A **chunk** is a 4 MiB piece of an object. A **manifest** is the small record per object: size, ETag, and the list of chunks and which node holds each. The full definitions are in the [system overview](../design/000-system-overview.md).
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **rendezvous hashing**: a way to pick nodes for a chunk. Every node gets a score for the chunk id and the highest scores win, so when a node leaves, only its chunks move.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **OTel** (OpenTelemetry): a standard way to emit metrics, logs and traces.
+> - **OTLP** (OpenTelemetry protocol): the wire format OTel data is sent in.
+> - **SQLite**: a small database that lives in one file.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## FrontdoorService (Rust)
 
 The only thing clients talk to. It checks limits, cuts an upload into chunks, writes the chunks to ChunkStoreService nodes, then writes the manifest to ObjectIndexService. A read looks up the manifest and streams the chunks back in order. It also emits the `ts2_http_*` metrics and one JSON log line per request.

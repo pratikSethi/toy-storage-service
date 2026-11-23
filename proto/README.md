@@ -2,6 +2,11 @@
 
 The internal contract between TS2 services: Protobuf and gRPC, package `ts2.v1`. The external contract for clients is the OpenAPI spec in `docs/api/openapi.yaml`.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+
 | File | Service | Implemented by |
 | --- | --- | --- |
 | `ts2/v1/chunk_store.proto` | `ChunkStoreService` | `chunk-store/` (C++) |

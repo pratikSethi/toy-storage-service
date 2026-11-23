@@ -2,6 +2,15 @@
 
 Fixes for the top five findings in [003-round4-review.md](003-round4-review.md), plus the referenced-chunk `NOT_FOUND` note from its error mapping section. One commit per finding. All of them follow the review's fix; deviations are listed at the end.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **orphan chunk**: a chunk on a node that no manifest points to. A failed upload, an overwrite or a delete can leave one.
+> - **garbage collection (GC)**: the background job that deletes orphan chunks once they are older than a minimum age.
+> - **rendezvous hashing**: a way to pick nodes for a chunk. Every node gets a score for the chunk id and the highest scores win, so when a node leaves, only its chunks move.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+
 ## 1. Cleanup after an ambiguous `PutManifest` failure
 
 - Changed: `put_object` (`ts2-core/src/object.rs`) deletes the chunks it wrote only when `put_manifest` fails with `BucketNotFound`, `InvalidBucketName` or `InvalidKey`, which prove nothing was committed. Any other error from `put_manifest` (Timeout, Unavailable, DiskFull, Internal) leaves the chunks for GC. Errors raised before `put_manifest` (node down, object too large) still clean up.
@@ -20,7 +29,7 @@ Fixes for the top five findings in [003-round4-review.md](003-round4-review.md),
 - Commit: `17d361a`
 - Tests: `startup_accepts_nodes_that_report_their_configured_id`, `startup_refuses_a_node_that_reports_another_id`, `startup_tolerates_a_node_that_is_not_up_yet`, `placement_skips_an_unhealthy_node_and_returns_when_it_recovers`, `placement_skips_a_node_that_swapped_ids_after_startup`, `placement_skips_a_node_that_just_ran_out_of_disk`, `placement_falls_back_to_all_nodes_when_none_looks_healthy`, `put_object_writes_every_chunk_to_the_healthy_node` (20 chunks, two nodes, one unhealthy, all land on the other).
 
-## 4. PUT timeout and GC `min_age`
+## 4. PUT timeout and the orphan cleanup minimum age (`min_age`)
 
 - Changed: `AppState.put_timeout` bounds a whole PUT (`TS2_PUT_TIMEOUT_SECS`, default 900); expiry returns 504. In remote mode frontdoor refuses to start when `TS2_GC_MIN_AGE_SECS` is below twice the timeout. `sweep` adds `CLOCK_SKEW_MARGIN` (60 s) to `min_age` before comparing with the node's `created_unix`. Compose passes `TS2_PUT_TIMEOUT_SECS`. A PUT cancelled by the timeout leaves its chunks to GC, which is why the 2x rule matters.
 - Commit: `f451f04`

@@ -2,6 +2,12 @@
 
 Status: accepted, mostly built
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **cell**: one ObjectIndexService plus its ChunkStoreService nodes. It is the unit a fault is meant to stay inside. One cell exists today.
+> - **ADR** (architecture decision record): a short note on one decision and why it was made.
+
 ## Context
 
 Presigned URLs in S3 let a client skip the customer's own app server. They do not skip S3's front end: the bytes still pass through S3's front-end fleet. Storage nodes in S3 are never reachable by clients.
@@ -23,7 +29,7 @@ Presigned URLs are an API feature in v0.3 (a signed URL that FrontdoorService ac
 
 ## Consequences
 
-- FrontdoorService NIC and CPU are the throughput ceiling for one request path. The fix is more FrontdoorService instances behind the load balancer.
+- FrontdoorService network card (NIC) and CPU are the throughput ceiling for one request path. The fix is more FrontdoorService instances behind the load balancer.
 - One place to enforce limits and emit metrics for every byte.
 - Clients cannot bypass admission.
 

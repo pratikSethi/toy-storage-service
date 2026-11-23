@@ -2,6 +2,17 @@
 
 C++20 (gRPC, protobuf, SQLite, spdlog, Catch2, built with CMake and vcpkg). The binary is `ts2-object-index`.
 
+> **Terms used here.** Defined once, so this page reads on its own.
+>
+> - **chunk**: a piece of an object, up to 4 MiB, stored on one ChunkStoreService node. A node is one process that owns one data directory.
+> - **manifest**: the small record kept for each object. It holds the size and the ordered list of its chunks, with the node that holds each one.
+> - **ETag**: a fingerprint of an object's bytes (the SHA-256 hash in hex). Two objects with the same ETag have the same content.
+> - **inline object**: an object under 64 KiB. It is stored inside its manifest instead of as chunks.
+> - **orphan chunk**: a chunk on a node that no manifest points to. A failed upload, an overwrite or a delete can leave one.
+> - **garbage collection (GC)**: the background job that deletes orphan chunks once they are older than a minimum age.
+> - **gRPC**: a way for services to call each other over the network (a remote procedure call, RPC), sending Protobuf messages over HTTP/2. The TS2 services talk to each other this way.
+> - **SQLite**: a small database that lives in one file.
+
 When you upload an object, its bytes end up as chunks on storage nodes. The manifest is the small record that says which chunks, in what order, make up the object, along with its size, ETag and content type. ObjectIndexService stores one manifest per `(bucket, key)` and answers "what is under this prefix?". It never touches chunk data, except tiny objects that are stored inline in the manifest itself.
 
 ## What it owns
