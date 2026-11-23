@@ -62,4 +62,4 @@ Wrong id on one of two nodes at startup, node not up yet at startup, node swappi
 - `CreateBucket`, `DeleteBucket` and `DeleteManifest` are not retried, which is narrower than "idempotent calls" read loosely; the review's list does not include them.
 - `put_manifest` errors other than the three definite ones leave chunks to GC, which is wider than the review's wording ("Timeout and Unavailable"); an `Internal` error can also hide a commit, for example a decode failure after the index answered.
 - A retry after a restart that is still booting can fail with 503. The e2e test waits one second before the second request.
-- Placement is still modulo; rendezvous hashing and replicas are the next round.
+- Placement is still modulo; rendezvous hashing and replicas come in later steps.

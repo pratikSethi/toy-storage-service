@@ -88,7 +88,10 @@ nav:
           - 0013 Orphan chunk cleanup runs per cell: adr/0013-gc-ownership-per-cell.md
       - Reviews:
           - 001 Plan review: reviews/001-plan-review.md
-          - 002 Round 3 review: reviews/002-round3-review.md
+          - 002 Review of the proto and C++ scaffold: reviews/002-round3-review.md
+          - 003 Fixes from review 003: reviews/003-fixes.md
+          - 004 Placement over four nodes: reviews/004-placement.md
+          - 005 Docs cleanup: reviews/005-docs-cleanup.md
       - Development setup: setup.md
       - Demo: demo.md
       - Port registry: ports.md
