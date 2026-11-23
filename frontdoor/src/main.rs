@@ -37,26 +37,20 @@ fn deadlines_from_env() -> Result<Deadlines, String> {
     })
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt()
-        .json()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
-        )
-        .init();
-
-    let put_timeout = env_secs("TS2_PUT_TIMEOUT_SECS", DEFAULT_PUT_TIMEOUT.as_secs())?;
-    if put_timeout.is_zero() {
-        return Err("TS2_PUT_TIMEOUT_SECS must be at least 1".into());
-    }
-    let path = std::env::args()
-        .nth(1)
-        .ok_or("usage: ts2-frontdoor <config.yaml>")?;
-    let config: Config = serde_yaml_ng::from_str(&std::fs::read_to_string(&path)?)?;
-    std::fs::create_dir_all(&config.data_dir)?;
-    // In-process backends by default. Setting both TS2_INDEX_ADDR and TS2_CHUNK_NODES switches to the gRPC services.
-    let (index, chunks): (Arc<dyn ObjectIndex>, Arc<dyn ChunkStore>) = match (
+/// Builds the object index and chunk store that the handlers talk to.
+///
+/// Default mode is in-process: a SQLite index at `config.sqlite_path` and chunks on local disk under
+/// `config.data_dir`. Setting both `TS2_INDEX_ADDR` and `TS2_CHUNK_NODES` switches to remote mode, where
+/// both go over gRPC to ObjectIndexService and ChunkStoreService. Setting only one of them is an error.
+///
+/// Remote mode also starts two background tasks: a periodic chunk node health refresh, and the orphan chunk
+/// garbage collector. It first checks that each node reports the id it is configured with, so a swapped
+/// address fails the start instead of corrupting manifests.
+async fn backends(
+    config: &Config,
+    put_timeout: Duration,
+) -> Result<(Arc<dyn ObjectIndex>, Arc<dyn ChunkStore>), Box<dyn std::error::Error>> {
+    let backends: (Arc<dyn ObjectIndex>, Arc<dyn ChunkStore>) = match (
         std::env::var("TS2_INDEX_ADDR"),
         std::env::var("TS2_CHUNK_NODES"),
     ) {
@@ -85,6 +79,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
         _ => return Err("set both TS2_INDEX_ADDR and TS2_CHUNK_NODES, or neither".into()),
     };
+    Ok(backends)
+}
+
+/// Starts the frontdoor server. Steps:
+/// 1. Set up JSON logging.
+/// 2. Read the PUT timeout from the environment.
+/// 3. Load the YAML config given as the first argument.
+/// 4. Choose the storage backends (see `backends()`).
+/// 5. Build the shared `AppState`.
+/// 6. Start the optional OTLP metrics export.
+/// 7. Serve HTTP until Ctrl+C.
+///
+/// Request routing is not here. It lives in `router()` in `frontdoor/src/lib.rs`, which maps each API path
+/// to a handler in `handlers.rs`.
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Logging: JSON lines, level from RUST_LOG (default info).
+    tracing_subscriber::fmt()
+        .json()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+
+    // Longest a PUT may take. GC uses it to avoid deleting chunks of an upload still in flight.
+    let put_timeout = env_secs("TS2_PUT_TIMEOUT_SECS", DEFAULT_PUT_TIMEOUT.as_secs())?;
+    if put_timeout.is_zero() {
+        return Err("TS2_PUT_TIMEOUT_SECS must be at least 1".into());
+    }
+    // Config: YAML file path from the command line, and make sure its data dir exists.
+    let path = std::env::args()
+        .nth(1)
+        .ok_or("usage: ts2-frontdoor <config.yaml>")?;
+    let config: Config = serde_yaml_ng::from_str(&std::fs::read_to_string(&path)?)?;
+    std::fs::create_dir_all(&config.data_dir)?;
+    // Pick the index and chunk store implementations.
+    let (index, chunks) = backends(&config, put_timeout).await?;
+    // Bundle everything the handlers need.
     let state = AppState {
         index,
         chunks,
@@ -92,8 +124,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         put_timeout,
     };
 
+    // Metrics: export over OTLP only if OTEL_EXPORTER_OTLP_ENDPOINT is set.
     let otlp = ts2_frontdoor::metrics::init_otlp();
 
+    // Serve until Ctrl+C, then let in-flight requests finish and flush metrics.
     let listener = tokio::net::TcpListener::bind(&config.listen).await?;
     tracing::info!(listen = %config.listen, "frontdoor started");
     axum::serve(listener, router(state))
