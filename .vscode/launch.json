@@ -33,6 +33,7 @@
       "program": "${workspaceFolder}/target/debug/ts2-frontdoor",
       "args": ["${workspaceFolder}/.vscode/frontdoor.debug.yaml"],
       "cwd": "${workspaceFolder}",
+      "sourceLanguages": ["rust"],
       "env": {
         "TS2_INDEX_ADDR": "127.0.0.1:50052",
         "TS2_CHUNK_NODES": "node-1=127.0.0.1:50051",
@@ -50,6 +51,7 @@
       "program": "${workspaceFolder}/target/debug/ts2-frontdoor",
       "args": ["${workspaceFolder}/.vscode/frontdoor.debug.yaml"],
       "cwd": "${workspaceFolder}",
+      "sourceLanguages": ["rust"],
       "preLaunchTask": "ts2: build frontdoor (debug)"
     },
     {
